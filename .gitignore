@@ -1,0 +1,22 @@
+# Python bytecode & environments
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+env/
+.ipynb_checkpoints/
+
+# Heavy datasets and local caches
+icentia11k/
+feature_cache/
+
+# Large output files, logs, and figures
+*.csv
+report_figures/
+window_rows.pkl
+pattern_tuning_rows.pkl
+
+# OS metadata
+.DS_Store
+Thumbs.db
