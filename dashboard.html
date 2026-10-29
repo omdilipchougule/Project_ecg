@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Real-Time ECG Arrhythmia Detection Pipeline</title>
+<style>
+  :root { --bg: #0f172a; --card: #1e293b; --text: #f8fafc; --muted: #94a3b8; --green: #22c55e; --amber: #f59e0b; --red: #ef4444; --purple: #a855f7; --blue: #3b82f6; }
+  * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
+  body { background: var(--bg); color: var(--text); padding: 18px; }
+  .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; border-bottom: 1px solid #334155; padding-bottom: 12px; }
+  .controls button { background: #334155; color: white; border: 1px solid #475569; padding: 8px 14px; border-radius: 6px; cursor: pointer; font-weight: 600; margin-left: 6px; transition: 0.15s; }
+  .controls button.active { background: var(--blue); border-color: #60a5fa; }
+  .pipeline-bar { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 16px; }
+  .stage { background: var(--card); padding: 10px 14px; border-radius: 8px; border-left: 4px solid var(--blue); font-size: 13px; }
+  .stage strong { display: block; color: #cbd5e1; margin-bottom: 3px; }
+  .grid { display: grid; grid-template-columns: 2.2fr 1fr; gap: 16px; }
+  .card { background: var(--card); border-radius: 10px; padding: 16px; border: 1px solid #334155; }
+  canvas { width: 100%; height: 260px; background: #090d16; border-radius: 6px; border: 1px solid #1e293b; display: block; }
+  .metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 14px; }
+  .metric-box { background: #0f172a; padding: 12px; border-radius: 8px; text-align: center; border: 1px solid #334155; }
+  .metric-box .val { font-size: 24px; font-weight: 700; margin-top: 4px; }
+  .banner { padding: 14px; border-radius: 8px; text-align: center; font-size: 20px; font-weight: 800; margin-bottom: 14px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .beat-table { width: 100%; border-collapse: collapse; font-size: 12.5px; margin-top: 8px; }
+  .beat-table th, .beat-table td { padding: 6px 8px; text-align: center; border-bottom: 1px solid #334155; }
+  .badge { padding: 2px 8px; border-radius: 4px; font-weight: 700; }
+  .b-N { background: rgba(34,197,94,0.2); color: var(--green); }
+  .b-S { background: rgba(168,85,247,0.25); color: var(--purple); }
+  .b-V { background: rgba(239,68,68,0.25); color: var(--red); }
+  .b-Q { background: rgba(245,158,11,0.25); color: var(--amber); }
+  .gauge-track { background: #0f172a; height: 18px; border-radius: 9px; overflow: hidden; position: relative; margin-top: 6px; border: 1px solid #334155; }
+  .gauge-fill { height: 100%; transition: width 0.3s; }
+  .gauge-gate { position: absolute; left: 35%; top: 0; bottom: 0; width: 2px; background: var(--red); }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <h2>Real-Time ECG Arrhythmia Detection Pipeline (Raspberry Pi 5)</h2>
+    <span style="color:var(--muted); font-size:13px;">250 Hz Sampling • Stateless Local Pan-Tompkins • 27-Feature 4-Class LightGBM • 30s Clinical Rule Engine</span>
+  </div>
+  <div class="controls">
+    <button id="btn-DEMO_NORMAL" class="active" onclick="setMode('DEMO_NORMAL')">1. Normal Sinus</button>
+    <button id="btn-DEMO_ECTOPY" onclick="setMode('DEMO_ECTOPY')">2. Inject Arrhythmia</button>
+    <button id="btn-DEMO_ARTIFACT" onclick="setMode('DEMO_ARTIFACT')">3. Inject Motion Artifact</button>
+    <button id="btn-ESP32_LIVE" onclick="setMode('ESP32_LIVE')">4. ESP32-S3 Live UDP</button>
+  </div>
+</div>
+
+<div class="pipeline-bar">
+  <div class="stage"><strong>Stage 1: Signal & Buffer</strong>0.5–40 Hz SOS Bandpass | Buffer: <span id="st-buf">0.0</span>/30.0s</div>
+  <div class="stage"><strong>Stage 2: R-Peak & 27 Features</strong>Local 90th-Pct Envelope + 1.5s Lookahead Margin</div>
+  <div class="stage"><strong>Stage 3: 4-Class LightGBM</strong>Calibrated N / S / V / Q | Hop Compute: <span id="st-comp">0.0</span> ms</div>
+  <div class="stage"><strong>Stage 4: Clinical Rule Gate</strong>Q-Gate &le; 35% | Active Mode: <span id="st-mode">DEMO_NORMAL</span></div>
+</div>
+
+<div class="grid">
+  <div class="card">
+    <div id="diag-banner" class="banner" style="background: #1e3a8a;">WARMING UP BUFFER...</div>
+    <canvas id="ecgCanvas" width="900" height="260"></canvas>
+    <div class="metrics">
+      <div class="metric-box"><div style="color:var(--muted);font-size:12px;">HEART RATE</div><div class="val" id="m-hr">-- BPM</div></div>
+      <div class="metric-box"><div style="color:var(--muted);font-size:12px;">PVC BURDEN (V)</div><div class="val" id="m-bv" style="color:var(--red);">0.0%</div></div>
+      <div class="metric-box"><div style="color:var(--muted);font-size:12px;">PAC BURDEN (S)</div><div class="val" id="m-bs" style="color:var(--purple);">0.0%</div></div>
+      <div class="metric-box"><div style="color:var(--muted);font-size:12px;">WINDOW BEATS / nRMSSD</div><div class="val" id="m-nn">0 / 0.00</div></div>
+    </div>
+    <div style="margin-top: 14px;">
+      <div style="display:flex; justify-content:space-between; font-size:12.5px;">
+        <span><strong>Stage 4 Artifact Gate:</strong> Window Q-Noise Burden (<span id="q-val">0.0%</span>)</span>
+        <span style="color:var(--red);">35.0% Poor-Quality Suppression Threshold</span>
+      </div>
+      <div class="gauge-track">
+        <div id="q-bar" class="gauge-fill" style="width:0%; background:var(--green);"></div>
+        <div class="gauge-gate" title="35% Threshold"></div>
+      </div>
+      <div style="margin-top:8px; font-size:13px; color:var(--muted);">
+        <strong>All Detected Window Rules:</strong> <span id="m-types" style="color:var(--text);">none</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3 style="font-size:15px; margin-bottom:4px;">Stage 3: Live Per-Beat Classifications</h3>
+    <table class="beat-table">
+      <thead>
+        <tr><th>Time (s)</th><th>Class</th><th>P(N)</th><th>P(S)</th><th>P(V)</th><th>P(Q)</th></tr>
+      </thead>
+      <tbody id="beat-Log"></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById('ecgCanvas');
+const ctx = canvas.getContext('2d');
+const MAX_PTS = 750;
+let trace = new Array(MAX_PTS).fill(0);
+
+function setMode(mode) {
+  fetch('/api/mode', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({mode})});
+  document.querySelectorAll('.controls button').forEach(b => b.classList.remove('active'));
+  document.getElementById('btn-' + mode).classList.add('active');
+  document.getElementById('beat-Log').innerHTML = '';
+}
+
+function drawECG() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.strokeStyle = '#1e293b'; ctx.lineWidth = 1;
+  for (let x = 0; x < canvas.width; x += 45) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke(); }
+  for (let y = 0; y < canvas.height; y += 45) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke(); }
+  ctx.strokeStyle = '#38bdf8'; ctx.lineWidth = 2;
+  ctx.beginPath();
+  const mid = canvas.height / 2;
+  for (let i = 0; i < trace.length; i++) {
+    const x = (i / MAX_PTS) * canvas.width;
+    const y = mid - (trace[i] * 55);
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+}
+
+const ws = new WebSocket(`ws://${location.host}/ws`);
+ws.onmessage = (ev) => {
+  const d = JSON.parse(ev.data);
+  document.getElementById('st-buf').textContent = d.buf_fill_s;
+  document.getElementById('st-comp').textContent = d.compute_ms;
+  document.getElementById('st-mode').textContent = d.mode;
+
+  trace.push(...d.signal);
+  if (trace.length > MAX_PTS) trace.splice(0, trace.length - MAX_PTS);
+  drawECG();
+
+  const w = d.window;
+  const banner = document.getElementById('diag-banner');
+  banner.textContent = `PRIMARY DIAGNOSIS: ${w.primary_type.replace(/_/g, ' ')}`;
+  if (w.primary_type === 'no_arrhythmia_detected') banner.style.background = '#15803d';
+  else if (w.primary_type === 'poor_quality') banner.style.background = '#d97706';
+  else if (w.primary_type === 'insufficient_data' || w.primary_type === 'warming_up') banner.style.background = '#1e3a8a';
+  else banner.style.background = '#b91c1c';
+
+  document.getElementById('m-hr').textContent = w.hr_bpm > 0 ? `${w.hr_bpm} BPM` : '-- BPM';
+  document.getElementById('m-bv').textContent = `${w.burden_V}%`;
+  document.getElementById('m-bs').textContent = `${w.burden_S}%`;
+  document.getElementById('m-nn').textContent = `${w.n_beats} / ${w.nrmssd}`;
+  document.getElementById('m-types').textContent = w.types.length ? w.types.join(', ') : 'none';
+
+  document.getElementById('q-val').textContent = `${w.burden_Q}%`;
+  const qBar = document.getElementById('q-bar');
+  qBar.style.width = `${Math.min(100, w.burden_Q)}%`;
+  qBar.style.background = w.burden_Q > 35.0 ? 'var(--amber)' : 'var(--green)';
+
+  const tbody = document.getElementById('beat-Log');
+  d.new_beats.forEach(b => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${b.t}s</td><td><span class="badge b-${b.label}">${b.label}</span></td>
+                    <td>${b.pN}</td><td>${b.pS}</td><td>${b.pV}</td><td>${b.pQ}</td>`;
+    tbody.insertBefore(tr, tbody.firstChild);
+    while (tbody.children.length > 14) tbody.removeChild(tbody.lastChild);
+  });
+};
+</script>
+</body>
+</html>
