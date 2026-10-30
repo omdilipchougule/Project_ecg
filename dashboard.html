@@ -2,160 +2,730 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Real-Time ECG Arrhythmia Detection Pipeline</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Clinical ECG Telemetry | Raspberry Pi 5</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
 <style>
-  :root { --bg: #0f172a; --card: #1e293b; --text: #f8fafc; --muted: #94a3b8; --green: #22c55e; --amber: #f59e0b; --red: #ef4444; --purple: #a855f7; --blue: #3b82f6; }
-  * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
-  body { background: var(--bg); color: var(--text); padding: 18px; }
-  .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; border-bottom: 1px solid #334155; padding-bottom: 12px; }
-  .controls button { background: #334155; color: white; border: 1px solid #475569; padding: 8px 14px; border-radius: 6px; cursor: pointer; font-weight: 600; margin-left: 6px; transition: 0.15s; }
-  .controls button.active { background: var(--blue); border-color: #60a5fa; }
-  .pipeline-bar { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 16px; }
-  .stage { background: var(--card); padding: 10px 14px; border-radius: 8px; border-left: 4px solid var(--blue); font-size: 13px; }
-  .stage strong { display: block; color: #cbd5e1; margin-bottom: 3px; }
-  .grid { display: grid; grid-template-columns: 2.2fr 1fr; gap: 16px; }
-  .card { background: var(--card); border-radius: 10px; padding: 16px; border: 1px solid #334155; }
-  canvas { width: 100%; height: 260px; background: #090d16; border-radius: 6px; border: 1px solid #1e293b; display: block; }
-  .metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 14px; }
-  .metric-box { background: #0f172a; padding: 12px; border-radius: 8px; text-align: center; border: 1px solid #334155; }
-  .metric-box .val { font-size: 24px; font-weight: 700; margin-top: 4px; }
-  .banner { padding: 14px; border-radius: 8px; text-align: center; font-size: 20px; font-weight: 800; margin-bottom: 14px; text-transform: uppercase; letter-spacing: 0.5px; }
-  .beat-table { width: 100%; border-collapse: collapse; font-size: 12.5px; margin-top: 8px; }
-  .beat-table th, .beat-table td { padding: 6px 8px; text-align: center; border-bottom: 1px solid #334155; }
-  .badge { padding: 2px 8px; border-radius: 4px; font-weight: 700; }
-  .b-N { background: rgba(34,197,94,0.2); color: var(--green); }
-  .b-S { background: rgba(168,85,247,0.25); color: var(--purple); }
-  .b-V { background: rgba(239,68,68,0.25); color: var(--red); }
-  .b-Q { background: rgba(245,158,11,0.25); color: var(--amber); }
-  .gauge-track { background: #0f172a; height: 18px; border-radius: 9px; overflow: hidden; position: relative; margin-top: 6px; border: 1px solid #334155; }
-  .gauge-fill { height: 100%; transition: width 0.3s; }
-  .gauge-gate { position: absolute; left: 35%; top: 0; bottom: 0; width: 2px; background: var(--red); }
+  :root {
+    --bg-base: #06080d;
+    --bg-surface: rgba(15, 20, 30, 0.78);
+    --bg-elevated: rgba(24, 32, 48, 0.65);
+    --border-subtle: rgba(255, 255, 255, 0.07);
+    --border-highlight: rgba(255, 255, 255, 0.14);
+    
+    --text-primary: #f8fafc;
+    --text-secondary: #94a3b8;
+    --text-muted: #64748b;
+    
+    --cyan: #06b6d4;
+    --cyan-glow: rgba(6, 182, 212, 0.35);
+    --emerald: #10b981;
+    --amber: #f59e0b;
+    --rose: #f43f5e;
+    --violet: #a855f7;
+    --blue: #3b82f6;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  
+  body {
+    background-color: var(--bg-base);
+    background-image: 
+      radial-gradient(at 0% 0%, rgba(6, 182, 212, 0.07) 0px, transparent 45%),
+      radial-gradient(at 100% 0%, rgba(59, 130, 246, 0.06) 0px, transparent 45%);
+    color: var(--text-primary);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    padding: 20px 28px;
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+
+  .mono {
+    font-family: 'JetBrains Mono', monospace;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* --- TOP HEADER --- */
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-bottom: 18px;
+    margin-bottom: 20px;
+    border-bottom: 1px solid var(--border-subtle);
+    flex-wrap: wrap;
+    gap: 16px;
+  }
+
+  .brand { display: flex; align-items: center; gap: 14px; }
+  
+  .status-orb {
+    width: 11px; height: 11px;
+    border-radius: 50%;
+    background: var(--emerald);
+    box-shadow: 0 0 12px var(--emerald);
+    animation: pulse-orb 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+  @keyframes pulse-orb { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.45; transform: scale(0.92); } }
+
+  .brand-title h1 {
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: -0.025em;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .triage-pill {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 9px;
+    border-radius: 999px;
+    background: rgba(16, 185, 129, 0.12);
+    border: 1px solid rgba(16, 185, 129, 0.3);
+    color: #34d399;
+    letter-spacing: 0.02em;
+    transition: all 0.3s ease;
+  }
+  .triage-pill.dispatched {
+    background: rgba(244, 63, 94, 0.2);
+    border-color: rgba(244, 63, 94, 0.5);
+    color: #fda4af;
+    box-shadow: 0 0 14px rgba(244, 63, 94, 0.35);
+  }
+
+  .brand-title p {
+    font-size: 12.5px;
+    color: var(--text-secondary);
+    margin-top: 3px;
+    font-weight: 400;
+  }
+
+  /* --- SEGMENTED CONTROLS --- */
+  .controls {
+    display: flex;
+    background: rgba(15, 20, 30, 0.9);
+    padding: 4px;
+    border-radius: 10px;
+    border: 1px solid var(--border-subtle);
+    gap: 4px;
+  }
+
+  .controls button {
+    background: transparent;
+    color: var(--text-secondary);
+    border: none;
+    padding: 8px 14px;
+    border-radius: 7px;
+    cursor: pointer;
+    font-family: 'Inter', sans-serif;
+    font-size: 12.5px;
+    font-weight: 600;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .controls button:hover { color: var(--text-primary); background: rgba(255, 255, 255, 0.04); }
+  .controls button.active {
+    background: linear-gradient(135deg, #2563eb, #0891b2);
+    color: #ffffff;
+    box-shadow: 0 2px 10px rgba(6, 182, 212, 0.3);
+  }
+
+  /* --- PIPELINE TELEMETRY RIBBON --- */
+  .pipeline-ribbon {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 14px;
+    margin-bottom: 20px;
+  }
+
+  .stage-card {
+    background: var(--bg-surface);
+    backdrop-filter: blur(12px);
+    padding: 13px 16px;
+    border-radius: 11px;
+    border: 1px solid var(--border-subtle);
+    position: relative;
+    overflow: hidden;
+  }
+  .stage-card::before {
+    content: "";
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 3px;
+    background: linear-gradient(to bottom, var(--cyan), var(--blue));
+  }
+  .stage-card .st-title {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-secondary);
+    margin-bottom: 4px;
+  }
+  .stage-card .st-desc {
+    font-size: 12.5px;
+    color: var(--text-primary);
+    font-weight: 500;
+  }
+  .hl-cyan { color: #22d3ee; font-weight: 600; }
+
+  /* --- MAIN WORKSPACE GRID --- */
+  .workspace {
+    display: grid;
+    grid-template-columns: 2.35fr 1fr;
+    gap: 20px;
+    align-items: start;
+  }
+
+  .panel {
+    background: var(--bg-surface);
+    backdrop-filter: blur(16px);
+    border-radius: 14px;
+    padding: 20px;
+    border: 1px solid var(--border-subtle);
+    box-shadow: 0 12px 32px -8px rgba(0, 0, 0, 0.5);
+  }
+
+  /* --- DYNAMIC DIAGNOSIS BANNER --- */
+  .diag-banner {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 20px;
+    border-radius: 10px;
+    margin-bottom: 18px;
+    font-weight: 700;
+    font-size: 16px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+  }
+  .diag-banner .diag-sub {
+    font-size: 11.5px;
+    font-weight: 600;
+    opacity: 0.85;
+    letter-spacing: 0.03em;
+  }
+
+  .state-warmup { background: linear-gradient(90deg, rgba(30, 58, 138, 0.75), rgba(15, 23, 42, 0.85)); border-color: rgba(59, 130, 246, 0.4); color: #93c5fd; }
+  .state-normal { background: linear-gradient(90deg, rgba(6, 95, 70, 0.8), rgba(6, 78, 59, 0.5)); border-color: rgba(16, 185, 129, 0.45); color: #6ee7b7; box-shadow: 0 0 25px rgba(16, 185, 129, 0.12); }
+  .state-artifact { background: linear-gradient(90deg, rgba(146, 64, 14, 0.85), rgba(120, 53, 15, 0.6)); border-color: rgba(245, 158, 11, 0.5); color: #fde68a; }
+  .state-critical { background: linear-gradient(90deg, rgba(159, 18, 57, 0.9), rgba(136, 19, 55, 0.7)); border-color: rgba(244, 63, 94, 0.6); color: #ffe4e6; box-shadow: 0 0 28px rgba(244, 63, 94, 0.25); }
+
+  /* --- OSCILLOSCOPE CANVAS --- */
+  .scope-wrapper {
+    background: #030508;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    position: relative;
+    overflow: hidden;
+    box-shadow: inset 0 0 24px rgba(0, 0, 0, 0.85);
+  }
+  .scope-overlay {
+    position: absolute;
+    top: 10px; left: 14px;
+    display: flex;
+    gap: 16px;
+    font-size: 11px;
+    color: rgba(148, 163, 184, 0.7);
+    pointer-events: none;
+    z-index: 2;
+  }
+  canvas {
+    width: 100%;
+    height: 270px;
+    display: block;
+  }
+
+  /* --- CLINICAL VITAL CARDS (5-COLUMN) --- */
+  .vitals-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 12px;
+    margin-top: 18px;
+  }
+
+  .vital-card {
+    background: var(--bg-elevated);
+    padding: 14px 12px;
+    border-radius: 10px;
+    border: 1px solid var(--border-subtle);
+    transition: transform 0.2s ease, border-color 0.2s ease;
+  }
+  .vital-card:hover { border-color: var(--border-highlight); transform: translateY(-1px); }
+  .vital-card .v-label {
+    font-size: 10.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-secondary);
+    display: flex;
+    justify-content: space-between;
+  }
+  .vital-card .v-value {
+    font-size: 24px;
+    font-weight: 700;
+    margin-top: 6px;
+    letter-spacing: -0.03em;
+  }
+  .vital-card .v-sub {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 3px;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* --- ARTIFACT GATE & RULES FOOTER --- */
+  .gate-footer {
+    margin-top: 18px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border-subtle);
+  }
+  .gate-header {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+  }
+  .gauge-track {
+    background: rgba(255, 255, 255, 0.06);
+    height: 9px;
+    border-radius: 999px;
+    overflow: hidden;
+    position: relative;
+    margin-top: 8px;
+  }
+  .gauge-fill {
+    height: 100%;
+    border-radius: 999px;
+    transition: width 0.4s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.3s ease;
+  }
+  .gauge-marker {
+    position: absolute;
+    left: 35%; top: 0; bottom: 0;
+    width: 2px;
+    background: var(--rose);
+    box-shadow: 0 0 6px var(--rose);
+  }
+  .rule-tags {
+    margin-top: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+  .rule-chip {
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid var(--border-subtle);
+    padding: 3px 9px;
+    border-radius: 6px;
+    font-size: 11.5px;
+    color: var(--text-primary);
+  }
+
+  /* --- STAGE 3 PER-BEAT LOG TABLE --- */
+  .log-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 4px;
+  }
+  .log-header h3 { font-size: 15px; font-weight: 700; letter-spacing: -0.01em; }
+  .log-sub { font-size: 12px; color: var(--text-secondary); margin-bottom: 14px; }
+
+  .beat-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12.5px;
+  }
+  .beat-table th {
+    padding: 9px 6px;
+    text-align: center;
+    border-bottom: 1px solid var(--border-highlight);
+    color: var(--text-secondary);
+    font-weight: 600;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .beat-table td {
+    padding: 9px 6px;
+    text-align: center;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+  .beat-table tbody tr {
+    transition: background-color 0.15s ease;
+    animation: fade-row 0.25s ease-out;
+  }
+  @keyframes fade-row { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+  .beat-table tbody tr:hover { background: rgba(255, 255, 255, 0.035); }
+
+  .badge {
+    padding: 3px 9px;
+    border-radius: 6px;
+    font-weight: 700;
+    font-size: 11.5px;
+    display: inline-block;
+    min-width: 30px;
+  }
+  .b-N { background: rgba(16, 185, 129, 0.14); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.35); }
+  .b-S { background: rgba(168, 85, 247, 0.14); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.35); }
+  .b-V { background: rgba(244, 63, 94, 0.16); color: #fb7185; border: 1px solid rgba(244, 63, 94, 0.4); }
+  .b-Q { background: rgba(245, 158, 11, 0.14); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.35); }
+
+  @media (max-width: 1150px) {
+    .workspace { grid-template-columns: 1fr; }
+    .vitals-grid { grid-template-columns: repeat(3, 1fr); }
+    .pipeline-ribbon { grid-template-columns: repeat(2, 1fr); }
+  }
 </style>
 </head>
 <body>
 
-<div class="header">
-  <div>
-    <h2>Real-Time ECG Arrhythmia Detection Pipeline (Raspberry Pi 5)</h2>
-    <span style="color:var(--muted); font-size:13px;">250 Hz Sampling • Stateless Local Pan-Tompkins • 27-Feature 4-Class LightGBM • 30s Clinical Rule Engine</span>
+<header class="header">
+  <div class="brand">
+    <div class="status-orb" id="ws-orb"></div>
+    <div class="brand-title">
+      <h1>
+        Clinical ECG Arrhythmia Telemetry
+        <span class="triage-pill" id="triage-status">TRIAGE ARMED • DISCORD + SMTP</span>
+      </h1>
+      <p>250 Hz AD8232 Stream • Stateless Pan-Tompkins • 27-Feature LightGBM • 30s Rule & HRV Engine</p>
+    </div>
   </div>
   <div class="controls">
     <button id="btn-DEMO_NORMAL" class="active" onclick="setMode('DEMO_NORMAL')">1. Normal Sinus</button>
     <button id="btn-DEMO_ECTOPY" onclick="setMode('DEMO_ECTOPY')">2. Inject Arrhythmia</button>
-    <button id="btn-DEMO_ARTIFACT" onclick="setMode('DEMO_ARTIFACT')">3. Inject Motion Artifact</button>
+    <button id="btn-DEMO_ARTIFACT" onclick="setMode('DEMO_ARTIFACT')">3. Motion Artifact</button>
     <button id="btn-ESP32_LIVE" onclick="setMode('ESP32_LIVE')">4. ESP32-S3 Live UDP</button>
   </div>
-</div>
+</header>
 
-<div class="pipeline-bar">
-  <div class="stage"><strong>Stage 1: Signal & Buffer</strong>0.5–40 Hz SOS Bandpass | Buffer: <span id="st-buf">0.0</span>/30.0s</div>
-  <div class="stage"><strong>Stage 2: R-Peak & 27 Features</strong>Local 90th-Pct Envelope + 1.5s Lookahead Margin</div>
-  <div class="stage"><strong>Stage 3: 4-Class LightGBM</strong>Calibrated N / S / V / Q | Hop Compute: <span id="st-comp">0.0</span> ms</div>
-  <div class="stage"><strong>Stage 4: Clinical Rule Gate</strong>Q-Gate &le; 35% | Active Mode: <span id="st-mode">DEMO_NORMAL</span></div>
-</div>
+<section class="pipeline-ribbon">
+  <div class="stage-card">
+    <div class="st-title">Stage 1 • Signal & Buffer</div>
+    <div class="st-desc">0.5–40 Hz SOS | Fill: <span id="st-buf" class="mono hl-cyan">0.0</span>/30.0s</div>
+  </div>
+  <div class="stage-card">
+    <div class="st-title">Stage 2 • R-Peak & HRV</div>
+    <div class="st-desc">90th-Pct Envelope + 1.5s Lookahead</div>
+  </div>
+  <div class="stage-card">
+    <div class="st-title">Stage 3 • 4-Class LightGBM</div>
+    <div class="st-desc">Hop Compute: <span id="st-comp" class="mono hl-cyan">0.0</span> ms</div>
+  </div>
+  <div class="stage-card">
+    <div class="st-title">Stage 4 • Clinical Rule Gate</div>
+    <div class="st-desc">Source: <span id="st-mode" class="mono hl-cyan">DEMO_NORMAL</span></div>
+  </div>
+</section>
 
-<div class="grid">
-  <div class="card">
-    <div id="diag-banner" class="banner" style="background: #1e3a8a;">WARMING UP BUFFER...</div>
-    <canvas id="ecgCanvas" width="900" height="260"></canvas>
-    <div class="metrics">
-      <div class="metric-box"><div style="color:var(--muted);font-size:12px;">HEART RATE</div><div class="val" id="m-hr">-- BPM</div></div>
-      <div class="metric-box"><div style="color:var(--muted);font-size:12px;">PVC BURDEN (V)</div><div class="val" id="m-bv" style="color:var(--red);">0.0%</div></div>
-      <div class="metric-box"><div style="color:var(--muted);font-size:12px;">PAC BURDEN (S)</div><div class="val" id="m-bs" style="color:var(--purple);">0.0%</div></div>
-      <div class="metric-box"><div style="color:var(--muted);font-size:12px;">WINDOW BEATS / nRMSSD</div><div class="val" id="m-nn">0 / 0.00</div></div>
+<main class="workspace">
+  <div class="panel">
+    <div id="diag-banner" class="diag-banner state-warmup">
+      <span id="diag-title">WARMING UP 30S BUFFER...</span>
+      <span class="diag-sub mono" id="diag-meta">AWAITING WINDOW LOCK</span>
     </div>
-    <div style="margin-top: 14px;">
-      <div style="display:flex; justify-content:space-between; font-size:12.5px;">
-        <span><strong>Stage 4 Artifact Gate:</strong> Window Q-Noise Burden (<span id="q-val">0.0%</span>)</span>
-        <span style="color:var(--red);">35.0% Poor-Quality Suppression Threshold</span>
+
+    <div class="scope-wrapper">
+      <div class="scope-overlay mono">
+        <span>LEAD II • 25 mm/s</span>
+        <span>GAIN: 10 mm/mV</span>
+        <span>NOTCH: 0.5–40 Hz</span>
+      </div>
+      <canvas id="ecgCanvas"></canvas>
+    </div>
+
+    <div class="vitals-grid">
+      <div class="vital-card">
+        <div class="v-label"><span>Heart Rate</span><span>BPM</span></div>
+        <div class="v-value mono" id="m-hr" style="color: var(--emerald);">--</div>
+        <div class="v-sub" id="m-hr-sub">Sinus Cadence</div>
+      </div>
+
+      <div class="vital-card">
+        <div class="v-label"><span>PVC Burden</span><span>CLASS V</span></div>
+        <div class="v-value mono" id="m-bv" style="color: var(--rose);">0.0%</div>
+        <div class="v-sub">Ventricular Ectopy</div>
+      </div>
+
+      <div class="vital-card">
+        <div class="v-label"><span>PAC Burden</span><span>CLASS S</span></div>
+        <div class="v-value mono" id="m-bs" style="color: var(--violet);">0.0%</div>
+        <div class="v-sub">Supraventricular</div>
+      </div>
+
+      <div class="vital-card">
+        <div class="v-label"><span>HRV (RMSSD)</span><span>ANS</span></div>
+        <div class="v-value mono" id="m-hrv" style="color: var(--cyan);">-- ms</div>
+        <div class="v-sub" id="m-stress">Calibrating NN...</div>
+      </div>
+
+      <div class="vital-card">
+        <div class="v-label"><span>Window Beats</span><span>nRMSSD</span></div>
+        <div class="v-value mono" id="m-nn">0 <span style="font-size:15px; color:var(--text-secondary);">/ 0.00</span></div>
+        <div class="v-sub">30s Rolling Count</div>
+      </div>
+    </div>
+
+    <div class="gate-footer">
+      <div class="gate-header">
+        <span>Stage 4 Artifact Gate: Window Q-Noise Burden (<span id="q-val" class="mono" style="color:var(--amber);">0.0%</span>)</span>
+        <span style="color:var(--rose);">35.0% False-Alarm Suppression Threshold</span>
       </div>
       <div class="gauge-track">
-        <div id="q-bar" class="gauge-fill" style="width:0%; background:var(--green);"></div>
-        <div class="gauge-gate" title="35% Threshold"></div>
+        <div id="q-bar" class="gauge-fill" style="width:0%; background:var(--emerald);"></div>
+        <div class="gauge-marker" title="35% Suppression Gate"></div>
       </div>
-      <div style="margin-top:8px; font-size:13px; color:var(--muted);">
-        <strong>All Detected Window Rules:</strong> <span id="m-types" style="color:var(--text);">none</span>
+      <div class="rule-tags">
+        <strong>Active Window Rules:</strong>
+        <div id="m-types" style="display:flex; gap:6px; flex-wrap:wrap;">
+          <span class="rule-chip">none</span>
+        </div>
       </div>
     </div>
   </div>
 
-  <div class="card">
-    <h3 style="font-size:15px; margin-bottom:4px;">Stage 3: Live Per-Beat Classifications</h3>
+  <div class="panel">
+    <div class="log-header">
+      <h3>Stage 3: Per-Beat Classification</h3>
+      <span class="mono" style="font-size:11px; color:var(--cyan);">1.5s MARGIN</span>
+    </div>
+    <p class="log-sub">Calibrated LightGBM probabilities per R-peak</p>
     <table class="beat-table">
       <thead>
-        <tr><th>Time (s)</th><th>Class</th><th>P(N)</th><th>P(S)</th><th>P(V)</th><th>P(Q)</th></tr>
+        <tr><th>Time</th><th>Class</th><th>P(N)</th><th>P(S)</th><th>P(V)</th><th>P(Q)</th></tr>
       </thead>
-      <tbody id="beat-Log"></tbody>
+      <tbody id="beat-log" class="mono"></tbody>
     </table>
   </div>
-</div>
+</main>
 
 <script>
 const canvas = document.getElementById('ecgCanvas');
 const ctx = canvas.getContext('2d');
-const MAX_PTS = 750;
+const MAX_PTS = 750; // 6 seconds at 125 Hz display rate
 let trace = new Array(MAX_PTS).fill(0);
+let beatTimes = [];
+
+// Handle crisp High-DPI / Retina scaling
+function resizeCanvas() {
+  const rect = canvas.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas();
 
 function setMode(mode) {
-  fetch('/api/mode', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({mode})});
+  fetch('/api/mode', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({mode})
+  });
   document.querySelectorAll('.controls button').forEach(b => b.classList.remove('active'));
-  document.getElementById('btn-' + mode).classList.add('active');
-  document.getElementById('beat-Log').innerHTML = '';
+  const btn = document.getElementById('btn-' + mode);
+  if (btn) btn.classList.add('active');
+  document.getElementById('beat-log').innerHTML = '';
+  beatTimes = [];
 }
 
-function drawECG() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.strokeStyle = '#1e293b'; ctx.lineWidth = 1;
-  for (let x = 0; x < canvas.width; x += 45) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke(); }
-  for (let y = 0; y < canvas.height; y += 45) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke(); }
-  ctx.strokeStyle = '#38bdf8'; ctx.lineWidth = 2;
+function drawGrid(w, h) {
+  // Minor 1mm clinical grid
+  ctx.strokeStyle = 'rgba(16, 185, 129, 0.045)';
+  ctx.lineWidth = 0.6;
   ctx.beginPath();
-  const mid = canvas.height / 2;
-  for (let i = 0; i < trace.length; i++) {
-    const x = (i / MAX_PTS) * canvas.width;
-    const y = mid - (trace[i] * 55);
-    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-  }
+  for (let x = 0; x < w; x += 14) { ctx.moveTo(x, 0); ctx.lineTo(x, h); }
+  for (let y = 0; y < h; y += 14) { ctx.moveTo(0, y); ctx.lineTo(w, y); }
+  ctx.stroke();
+
+  // Major 5mm clinical grid
+  ctx.strokeStyle = 'rgba(16, 185, 129, 0.11)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let x = 0; x < w; x += 70) { ctx.moveTo(x, 0); ctx.lineTo(x, h); }
+  for (let y = 0; y < h; y += 70) { ctx.moveTo(0, y); ctx.lineTo(w, y); }
   ctx.stroke();
 }
 
+function renderLoop() {
+  const rect = canvas.getBoundingClientRect();
+  const w = rect.width;
+  const h = rect.height;
+
+  ctx.clearRect(0, 0, w, h);
+  drawGrid(w, h);
+
+  const mid = h / 2;
+  const scaleY = h * 0.24;
+
+  // Waveform path
+  ctx.beginPath();
+  for (let i = 0; i < trace.length; i++) {
+    const x = (i / (MAX_PTS - 1)) * w;
+    const y = mid - (trace[i] * scaleY);
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+
+  // Subtle cyan glow & stroke
+  ctx.strokeStyle = '#06b6d4';
+  ctx.lineWidth = 2.2;
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  ctx.shadowColor = 'rgba(6, 182, 212, 0.55)';
+  ctx.shadowBlur = 8;
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+
+  // Leading-edge phosphor head
+  const lastX = w - 2;
+  const lastY = mid - (trace[trace.length - 1] * scaleY);
+  ctx.beginPath();
+  ctx.arc(lastX, lastY, 3.5, 0, Math.PI * 2);
+  ctx.fillStyle = '#e0f2fe';
+  ctx.shadowColor = '#06b6d4';
+  ctx.shadowBlur = 12;
+  ctx.fill();
+  ctx.shadowBlur = 0;
+
+  requestAnimationFrame(renderLoop);
+}
+requestAnimationFrame(renderLoop);
+
+// Fallback client-side RMSSD computation if server.py hasn't added rmssd_ms yet
+function computeClientRMSSD(timesSec, nrmssdFallback, hrBpm) {
+  if (timesSec.length >= 4) {
+    const rrs = [];
+    for (let i = 1; i < timesSec.length; i++) {
+      const dt = (timesSec[i] - timesSec[i - 1]) * 1000;
+      if (dt > 300 && dt < 2000) rrs.push(dt);
+    }
+    if (rrs.length >= 2) {
+      let sumSq = 0;
+      for (let i = 1; i < rrs.length; i++) {
+        const diff = rrs[i] - rrs[i - 1];
+        sumSq += diff * diff;
+      }
+      return Math.sqrt(sumSq / (rrs.length - 1));
+    }
+  }
+  if (nrmssdFallback > 0 && hrBpm > 0) {
+    const meanRR = 60000 / hrBpm;
+    return nrmssdFallback * meanRR;
+  }
+  return 0;
+}
+
 const ws = new WebSocket(`ws://${location.host}/ws`);
+ws.onopen = () => { document.getElementById('ws-orb').style.background = 'var(--emerald)'; };
+ws.onclose = () => { document.getElementById('ws-orb').style.background = 'var(--rose)'; };
+
 ws.onmessage = (ev) => {
   const d = JSON.parse(ev.data);
-  document.getElementById('st-buf').textContent = d.buf_fill_s;
-  document.getElementById('st-comp').textContent = d.compute_ms;
+  document.getElementById('st-buf').textContent = Number(d.buf_fill_s).toFixed(1);
+  document.getElementById('st-comp').textContent = Number(d.compute_ms).toFixed(2);
   document.getElementById('st-mode').textContent = d.mode;
 
-  trace.push(...d.signal);
-  if (trace.length > MAX_PTS) trace.splice(0, trace.length - MAX_PTS);
-  drawECG();
+  // Append incoming signal chunk
+  if (Array.isArray(d.signal) && d.signal.length) {
+    trace.push(...d.signal);
+    if (trace.length > MAX_PTS) trace.splice(0, trace.length - MAX_PTS);
+  }
 
   const w = d.window;
   const banner = document.getElementById('diag-banner');
-  banner.textContent = `PRIMARY DIAGNOSIS: ${w.primary_type.replace(/_/g, ' ')}`;
-  if (w.primary_type === 'no_arrhythmia_detected') banner.style.background = '#15803d';
-  else if (w.primary_type === 'poor_quality') banner.style.background = '#d97706';
-  else if (w.primary_type === 'insufficient_data' || w.primary_type === 'warming_up') banner.style.background = '#1e3a8a';
-  else banner.style.background = '#b91c1c';
+  const titleEl = document.getElementById('diag-title');
+  const metaEl = document.getElementById('diag-meta');
 
-  document.getElementById('m-hr').textContent = w.hr_bpm > 0 ? `${w.hr_bpm} BPM` : '-- BPM';
+  const cleanPrimary = w.primary_type.replace(/_/g, ' ').toUpperCase();
+  titleEl.textContent = `PRIMARY DIAGNOSIS: ${cleanPrimary}`;
+  metaEl.textContent = w.hr_bpm > 0 ? `${w.hr_bpm} BPM • ${w.n_beats} BEATS` : 'BUFFERING...';
+
+  banner.className = 'diag-banner ';
+  if (w.primary_type === 'no_arrhythmia_detected') banner.classList.add('state-normal');
+  else if (w.primary_type === 'poor_quality') banner.classList.add('state-artifact');
+  else if (w.primary_type === 'insufficient_data' || w.primary_type === 'warming_up') banner.classList.add('state-warmup');
+  else banner.classList.add('state-critical');
+
+  // Update Triage Pill if alert dispatched
+  const triagePill = document.getElementById('triage-status');
+  if (w.alert_dispatched) {
+    triagePill.textContent = `🚨 TRIAGE DISPATCHED: ${cleanPrimary}`;
+    triagePill.classList.add('dispatched');
+  }
+
+  // Track beat timestamps for HRV fallback
+  if (Array.isArray(d.new_beats)) {
+    d.new_beats.forEach(b => {
+      if (b.label === 'N') beatTimes.push(parseFloat(b.t));
+    });
+    if (beatTimes.length > 40) beatTimes.splice(0, beatTimes.length - 40);
+  }
+
+  // Vitals update
+  document.getElementById('m-hr').textContent = w.hr_bpm > 0 ? `${w.hr_bpm}` : '--';
+  document.getElementById('m-hr-sub').textContent = w.hr_bpm > 100 ? 'Tachycardic Range' : (w.hr_bpm > 0 && w.hr_bpm < 60 ? 'Bradycardic Range' : 'Normal Sinus Range');
   document.getElementById('m-bv').textContent = `${w.burden_V}%`;
   document.getElementById('m-bs').textContent = `${w.burden_S}%`;
-  document.getElementById('m-nn').textContent = `${w.n_beats} / ${w.nrmssd}`;
-  document.getElementById('m-types').textContent = w.types.length ? w.types.join(', ') : 'none';
+  document.getElementById('m-nn').innerHTML = `${w.n_beats} <span style="font-size:14px; color:var(--text-secondary);">/ ${w.nrmssd}</span>`;
 
+  // HRV RMSSD display
+  const rmssdVal = w.rmssd_ms !== undefined ? w.rmssd_ms : computeClientRMSSD(beatTimes, w.nrmssd, w.hr_bpm);
+  const hrvEl = document.getElementById('m-hrv');
+  const stressEl = document.getElementById('m-stress');
+  if (rmssdVal > 0) {
+    hrvEl.textContent = `${rmssdVal.toFixed(1)} ms`;
+    const stressLabel = w.stress_state || (rmssdVal < 22 ? 'High Sympathetic Load' : (rmssdVal < 42 ? 'Moderate Tone' : 'Optimal Vagal Tone'));
+    stressEl.textContent = stressLabel;
+    hrvEl.style.color = rmssdVal < 22 ? 'var(--amber)' : 'var(--cyan)';
+  } else {
+    hrvEl.textContent = '-- ms';
+    stressEl.textContent = 'Calibrating NN...';
+  }
+
+  // Rule chips
+  const typesContainer = document.getElementById('m-types');
+  if (w.types && w.types.length) {
+    typesContainer.innerHTML = w.types.map(t => `<span class="rule-chip mono">${t}</span>`).join('');
+  } else {
+    typesContainer.innerHTML = `<span class="rule-chip mono">none</span>`;
+  }
+
+  // Artifact Q-Gate Gauge
   document.getElementById('q-val').textContent = `${w.burden_Q}%`;
   const qBar = document.getElementById('q-bar');
   qBar.style.width = `${Math.min(100, w.burden_Q)}%`;
-  qBar.style.background = w.burden_Q > 35.0 ? 'var(--amber)' : 'var(--green)';
+  qBar.style.background = w.burden_Q > 35.0 ? 'var(--amber)' : 'var(--emerald)';
 
-  const tbody = document.getElementById('beat-Log');
+  // Prepend new classified beats
+  const tbody = document.getElementById('beat-log');
   d.new_beats.forEach(b => {
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${b.t}s</td><td><span class="badge b-${b.label}">${b.label}</span></td>
-                    <td>${b.pN}</td><td>${b.pS}</td><td>${b.pV}</td><td>${b.pQ}</td>`;
+    tr.innerHTML = `
+      <td style="color:var(--text-secondary);">${b.t}s</td>
+      <td><span class="badge b-${b.label}">${b.label}</span></td>
+      <td style="color:${b.pN > 0.5 ? '#34d399' : 'inherit'}; font-weight:${b.pN > 0.5 ? '700' : '400'}">${b.pN}</td>
+      <td style="color:${b.pS > 0.5 ? '#c084fc' : 'inherit'}; font-weight:${b.pS > 0.5 ? '700' : '400'}">${b.pS}</td>
+      <td style="color:${b.pV > 0.5 ? '#fb7185' : 'inherit'}; font-weight:${b.pV > 0.5 ? '700' : '400'}">${b.pV}</td>
+      <td style="color:${b.pQ > 0.5 ? '#fbbf24' : 'inherit'}; font-weight:${b.pQ > 0.5 ? '700' : '400'}">${b.pQ}</td>
+    `;
     tbody.insertBefore(tr, tbody.firstChild);
-    while (tbody.children.length > 14) tbody.removeChild(tbody.lastChild);
+    while (tbody.children.length > 13) tbody.removeChild(tbody.lastChild);
   });
 };
 </script>
