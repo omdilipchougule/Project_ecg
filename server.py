@@ -1,5 +1,5 @@
 """server.py - Raspberry Pi 5 FastAPI + WebSocket + UDP Telemetry Server for ECG Arrhythmia Pipeline."""
-import os, sys, time, json, socket, asyncio, threading, smtplib
+import os, sys, io, uuid, time, json, socket, asyncio, threading, smtplib
 import urllib.request
 from email.message import EmailMessage
 from collections import deque
@@ -20,14 +20,13 @@ CHUNK_S    = 0.5
 CHUNK_N    = int(CHUNK_S * FS)  # 125 samples per 0.5s hop
 
 # --- TELEMEDICINE TRIAGE ALERT CONFIGURATION ---
-# You can set these via environment variables or paste your credentials directly below
 DISCORD_WEBHOOK_URL = os.getenv("ECG_DISCORD_WEBHOOK", "https://discord.com/api/webhooks/1565770713908908064/f2l4l9dU9JdOiQ2sSKPJOCmrNZa8FeRNLTTzsQc0IK5rYT7CRYppu8Vd2eunRWzGCqs4")
 SMTP_SENDER_EMAIL   = os.getenv("ECG_SMTP_SENDER", "chouguleo918@gmail.com")
 SMTP_APP_PASSWORD   = os.getenv("ECG_SMTP_PASSWORD", "mbygkigfqcgnshmd")
 PHYSICIAN_EMAIL     = os.getenv("ECG_PHYSICIAN_EMAIL", "om2018chougule@gmail.com")
 ALERT_COOLDOWN_SEC  = 60.0
 
-app = FastAPI(title="Real-Time ECG Arrhythmia Pipeline")
+app = FastAPI(title="Clinical ECG Telemetry")
 bundle = ep.load_bundle(MODEL_PATH)
 
 def build_synthetic_stream(mode='normal', seconds=120):
@@ -39,7 +38,6 @@ def build_synthetic_stream(mode='normal', seconds=120):
     pos, beat_idx = 0.8, 0
     while pos < seconds - 1.0:
         if mode == 'ectopy' and beat_idx % 6 == 4:
-            # Premature wide-QRS PVC + compensatory pause
             pos -= 0.22
             sig += g(pos, 0.022, -1.35) + g(pos + 0.22, 0.05, -0.45)
             pos += 1.02
@@ -61,16 +59,42 @@ def load_demo_signals():
 
 DEMOS = load_demo_signals()
 
-# --- HRV & AUTONOMIC STRESS ENGINE ---
+# --- CLINICAL RATIONALE GENERATOR ---
+CLINICAL_DESCRIPTIONS = {
+    "ventricular_tachycardia": (
+        "Run of >=3 consecutive premature ventricular contractions (Class V) detected. "
+        "Indicates rapid ventricular depolarization originating below the AV node; immediate clinical review advised."
+    ),
+    "frequent_PVC": (
+        "Ventricular ectopy burden (Class V) exceeded the 10% clinical threshold across the 30s window. "
+        "Characterized by wide, bizarre QRS complexes lacking preceding P-waves with compensatory pauses."
+    ),
+    "isolated_PVC": (
+        "Sporadic premature ventricular contractions (Class V) identified within otherwise regular sinus rhythm."
+    ),
+    "supraventricular_tachycardia": (
+        "Elevated supraventricular ectopic burden (Class S) combined with rapid ventricular response. "
+        "Suggests abnormal atrial or AV junctional automaticity/re-entry."
+    ),
+    "frequent_PAC": (
+        "Premature atrial contraction burden (Class S) exceeded threshold across the 30s window."
+    ),
+    "tachycardia": (
+        "Sustained ventricular rate > 100 BPM with predominantly normal QRS morphology (Sinus Tachycardia)."
+    ),
+    "bradycardia": (
+        "Sustained ventricular rate < 60 BPM across the 30s evaluation window (Sinus Bradycardia)."
+    ),
+    "irregular_rhythm_suspected": (
+        "Elevated normalized root-mean-square of successive RR differences (nRMSSD) in the absence of simple ectopy. "
+        "Suggests irregular R-R cadence requiring evaluation for atrial fibrillation or sinus arrhythmia."
+    )
+}
+
 def derive_hrv_metrics(hr_bpm, nrmssd, nn_times_deque):
-    """
-    Computes RMSSD in milliseconds and autonomic nervous system (ANS) stress state.
-    Uses exact conversion from detector's nRMSSD + HR, or falls back to NN timestamps.
-    """
     rmssd_ms = 0.0
     if hr_bpm > 0.0 and nrmssd > 0.0:
-        mean_rr_ms = 60000.0 / hr_bpm
-        rmssd_ms = nrmssd * mean_rr_ms
+        rmssd_ms = nrmssd * (60000.0 / hr_bpm)
     elif len(nn_times_deque) >= 4:
         rrs = np.diff(np.array(nn_times_deque, dtype=np.float64)) * 1000.0
         valid_rr = rrs[(rrs > 300.0) & (rrs < 2000.0)]
@@ -79,70 +103,180 @@ def derive_hrv_metrics(hr_bpm, nrmssd, nn_times_deque):
 
     rmssd_ms = round(float(rmssd_ms), 1)
     if rmssd_ms <= 0.0:
-        stress_state = "Calibrating NN..."
+        stress_state = "Calibrating"
     elif rmssd_ms < 22.0:
-        stress_state = "High Sympathetic Load"
+        stress_state = "High Sympathetic"
     elif rmssd_ms < 42.0:
-        stress_state = "Moderate Autonomic Tone"
+        stress_state = "Moderate Tone"
     else:
-        stress_state = "Optimal Vagal Tone"
-
+        stress_state = "Optimal Vagal"
     return rmssd_ms, stress_state
 
-# --- ASYNCHRONOUS DUAL-CHANNEL TRIAGE DISPATCHER ---
-def _send_alerts_worker(diagnosis, hr_bpm, burden_v, burden_s, rmssd_ms, stress_state, mode):
+def render_episode_png(sig_slice, diagnosis, hr_bpm):
+    """Renders a 6-second clinical ECG strip to an in-memory PNG buffer."""
+    try:
+        import matplotlib
+        matplotlib.use('Agg')
+        import matplotlib.pyplot as plt
+        fig, ax = plt.subplots(figsize=(8.5, 2.4), dpi=130)
+        fig.patch.set_facecolor('#06080d')
+        ax.set_facecolor('#06080d')
+
+        t = np.arange(len(sig_slice)) / float(FS)
+        ax.grid(True, which='both', color='#10b981', alpha=0.14, linestyle='-', linewidth=0.6)
+        ax.plot(t, sig_slice, color='#06b6d4', linewidth=1.4)
+        ax.set_title(
+            f"6.0s Trigger Episode  |  {diagnosis.replace('_', ' ').upper()}  |  {hr_bpm} BPM",
+            color='#f8fafc', fontsize=10, fontweight='bold', pad=8
+        )
+        ax.set_xlabel("Time (seconds)", color='#94a3b8', fontsize=8)
+        ax.tick_params(colors='#64748b', labelsize=8)
+        for spine in ax.spines.values():
+            spine.set_color('#1e293b')
+
+        buf = io.BytesIO()
+        plt.tight_layout()
+        plt.savefig(buf, format='png', facecolor=fig.get_facecolor())
+        plt.close(fig)
+        buf.seek(0)
+        return buf.read()
+    except Exception as e:
+        print(f"[Strip Renderer Info] Matplotlib unavailable ({e}), sending text-only episode.")
+        return None
+
+def _post_discord_multipart(webhook_url, payload_dict, png_bytes=None):
+    """Sends JSON + optional PNG attachment to Discord without external libraries."""
+    if not png_bytes:
+        req = urllib.request.Request(
+            webhook_url,
+            data=json.dumps(payload_dict).encode("utf-8"),
+            headers={"Content-Type": "application/json", "User-Agent": "ECG-Monitor/1.0"}
+        )
+        urllib.request.urlopen(req, timeout=8)
+        return
+
+    boundary = f"----ECGBoundary{uuid.uuid4().hex}"
+    body = io.BytesIO()
+
+    # Part 1: payload_json
+    body.write(f"--{boundary}\r\n".encode())
+    body.write(b'Content-Disposition: form-data; name="payload_json"\r\n')
+    body.write(b'Content-Type: application/json\r\n\r\n')
+    body.write(json.dumps(payload_dict).encode("utf-8"))
+    body.write(b"\r\n")
+
+    # Part 2: PNG file
+    body.write(f"--{boundary}\r\n".encode())
+    body.write(b'Content-Disposition: form-data; name="files[0]"; filename="episode_strip.png"\r\n')
+    body.write(b'Content-Type: image/png\r\n\r\n')
+    body.write(png_bytes)
+    body.write(b"\r\n")
+    body.write(f"--{boundary}--\r\n".encode())
+
+    req = urllib.request.Request(
+        webhook_url,
+        data=body.getvalue(),
+        headers={
+            "Content-Type": f"multipart/form-data; boundary={boundary}",
+            "User-Agent": "ECG-Monitor/1.0"
+        }
+    )
+    urllib.request.urlopen(req, timeout=10)
+
+def _send_alerts_worker(ep_snapshot):
+    diagnosis    = ep_snapshot["primary"]
+    all_rules    = ep_snapshot["types"]
+    hr_bpm       = ep_snapshot["hr_bpm"]
+    burden_v     = ep_snapshot["burden_v"]
+    burden_s     = ep_snapshot["burden_s"]
+    burden_q     = ep_snapshot["burden_q"]
+    nrmssd       = ep_snapshot["nrmssd"]
+    rmssd_ms     = ep_snapshot["rmssd_ms"]
+    stress_state = ep_snapshot["stress_state"]
+    mode         = ep_snapshot["mode"]
+    recent_beats = ep_snapshot["recent_beats"]
+    sig_slice    = ep_snapshot["sig_slice"]
+
     timestamp_str = time.strftime("%Y-%m-%d %H:%M:%S")
     clean_diag = diagnosis.replace("_", " ").upper()
+    rationale = CLINICAL_DESCRIPTIONS.get(
+        diagnosis,
+        "Abnormal rhythm pattern crossed clinical rule thresholds across the 30-second evaluation window."
+    )
 
-    # 1. Discord Rich Webhook
+    # Format the last 8 beats of the episode
+    if recent_beats:
+        beat_lines = []
+        for b in recent_beats[-8:]:
+            flag = "⚠️" if b["label"] in ("V", "S") else "•"
+            beat_lines.append(
+                f"{flag} t={b['t']}s | Class {b['label']} "
+                f"(N:{b['pN']:.2f}, S:{b['pS']:.2f}, V:{b['pV']:.2f}, Q:{b['pQ']:.2f})"
+            )
+        beat_log_str = "\n".join(beat_lines)
+    else:
+        beat_log_str = "No individual R-peak probabilities logged in immediate sub-window."
+
+    png_bytes = render_episode_png(sig_slice, diagnosis, hr_bpm) if len(sig_slice) > 50 else None
+
+    # 1. Discord Rich Embed + Episode Strip Image
     if DISCORD_WEBHOOK_URL and "YOUR_DISCORD" not in DISCORD_WEBHOOK_URL:
         try:
-            payload = {
-                "username": "Clinical ECG Telemetry Node",
-                "embeds": [{
-                    "title": f"🚨 CRITICAL TRIAGE ALERT: {clean_diag}",
-                    "color": 15548997,
-                    "fields": [
-                        {"name": "Heart Rate", "value": f"**{hr_bpm} BPM**", "inline": True},
-                        {"name": "PVC / PAC Burden", "value": f"V: {burden_v}% | S: {burden_s}%", "inline": True},
-                        {"name": "HRV (RMSSD)", "value": f"{rmssd_ms} ms ({stress_state})", "inline": True},
-                        {"name": "Signal Source", "value": f"`{mode}`", "inline": True},
-                        {"name": "Timestamp", "value": timestamp_str, "inline": True}
-                    ],
-                    "footer": {"text": "Raspberry Pi 5 • 4-Class LightGBM Arrhythmia Pipeline"}
-                }]
+            embed = {
+                "title": f"🚨 CLINICAL TRIAGE ALERT: {clean_diag}",
+                "description": f"**Clinical Rationale:** {rationale}",
+                "color": 15548997,
+                "fields": [
+                    {"name": "Ventricular Rate", "value": f"**{hr_bpm} BPM**", "inline": True},
+                    {"name": "Ectopic Burden (30s)", "value": f"PVC (V): **{burden_v}%** | PAC (S): **{burden_s}%**", "inline": True},
+                    {"name": "Autonomic HRV", "value": f"**{rmssd_ms} ms** ({stress_state})\nnRMSSD: `{nrmssd}`", "inline": True},
+                    {"name": "Triggered Window Rules", "value": ", ".join(f"`{r}`" for r in all_rules) if all_rules else f"`{diagnosis}`", "inline": True},
+                    {"name": "Signal Quality (Q-Gate)", "value": f"Noise: {burden_q}% (`{mode}`)", "inline": True},
+                    {"name": "Timestamp", "value": timestamp_str, "inline": True},
+                    {"name": "Flagged Episode Beat Sequence (Last 8 Beats)", "value": f"```\n{beat_log_str}\n```", "inline": False}
+                ],
+                "footer": {"text": "Raspberry Pi 5 • 4-Class LightGBM Telemetry"}
             }
-            req = urllib.request.Request(
-                DISCORD_WEBHOOK_URL,
-                data=json.dumps(payload).encode("utf-8"),
-                headers={"Content-Type": "application/json", "User-Agent": "ECG-Monitor/1.0"}
-            )
-            urllib.request.urlopen(req, timeout=5)
+            if png_bytes:
+                embed["image"] = {"url": "attachment://episode_strip.png"}
+
+            payload = {"username": "ECG Clinical Triage", "embeds": [embed]}
+            _post_discord_multipart(DISCORD_WEBHOOK_URL, payload, png_bytes)
         except Exception as e:
             print(f"[Triage Warning] Discord webhook failed: {e}")
 
-    # 2. Automated SMTP Email
+    # 2. Automated Clinical SMTP Email + Attached Rhythm Strip
     if SMTP_APP_PASSWORD and "YOUR_16_CHAR" not in SMTP_APP_PASSWORD:
         try:
             msg = EmailMessage()
-            msg["Subject"] = f"[URGENT ECG ALERT] {clean_diag} Detected ({hr_bpm} BPM)"
+            msg["Subject"] = f"[ECG TRIAGE ALERT] {clean_diag} ({hr_bpm} BPM)"
             msg["From"] = SMTP_SENDER_EMAIL
             msg["To"] = PHYSICIAN_EMAIL
             msg.set_content(
-                f"AUTOMATED TELEMEDICINE TRIAGE REPORT\n"
-                f"====================================\n"
-                f"Primary Diagnosis : {clean_diag}\n"
-                f"Signal Source     : {mode}\n"
-                f"Timestamp         : {timestamp_str}\n\n"
-                f"WINDOW METRICS (30s Rolling Buffer):\n"
-                f"- Heart Rate      : {hr_bpm} BPM\n"
-                f"- Ventricular (V) : {burden_v}%\n"
-                f"- Atrial (S)      : {burden_s}%\n"
-                f"- HRV (RMSSD)     : {rmssd_ms} ms ({stress_state})\n"
-                f"====================================\n"
-                f"Action Required: Review live Raspberry Pi 5 telemetry dashboard immediately."
+                f"CLINICAL TELEMEDICINE TRIAGE REPORT\n"
+                f"============================================================\n"
+                f"Primary Diagnosis  : {clean_diag}\n"
+                f"Triggered Rules    : {', '.join(all_rules) if all_rules else diagnosis}\n"
+                f"Timestamp          : {timestamp_str}\n"
+                f"Telemetry Source   : {mode}\n\n"
+                f"CLINICAL RATIONALE :\n"
+                f"{rationale}\n\n"
+                f"30-SECOND WINDOW PHYSIOLOGICAL METRICS:\n"
+                f"  • Ventricular Rate      : {hr_bpm} BPM\n"
+                f"  • PVC Burden (Class V)  : {burden_v}%\n"
+                f"  • PAC Burden (Class S)  : {burden_s}%\n"
+                f"  • Artifact Burden (Q)   : {burden_q}%\n"
+                f"  • HRV (RMSSD / nRMSSD)  : {rmssd_ms} ms / {nrmssd} ({stress_state})\n\n"
+                f"FLAGGED EPISODE BEAT LOG (Most Recent Beats Leading to Trigger):\n"
+                f"------------------------------------------------------------\n"
+                f"{beat_log_str}\n"
+                f"------------------------------------------------------------\n"
+                f"Note: A 6.0-second 250 Hz ECG rhythm strip of the episode is attached.\n"
             )
-            with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=10) as smtp:
+            if png_bytes:
+                msg.add_attachment(png_bytes, maintype="image", subtype="png", filename="episode_strip.png")
+
+            with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=12) as smtp:
                 smtp.login(SMTP_SENDER_EMAIL, SMTP_APP_PASSWORD)
                 smtp.send_message(msg)
         except Exception as e:
@@ -155,6 +289,7 @@ class PipelineState:
         self.ptr = 0
         self.udp_queue = deque(maxlen=FS * 10)
         self.nn_times = deque(maxlen=40)
+        self.recent_beats = deque(maxlen=16)
         self.det = ep.StreamingArrhythmiaDetector(bundle, fs=FS, buf_s=30, hop_s=0.5, margin_s=1.5)
         self.clients = set()
         self.last_alert_ts = 0.0
@@ -162,7 +297,7 @@ class PipelineState:
         self.last_win = dict(
             primary_type='warming_up', types=[], hr_bpm=0.0,
             burden_V=0.0, burden_S=0.0, burden_Q=0.0, nrmssd=0.0,
-            rmssd_ms=0.0, stress_state='Calibrating NN...',
+            rmssd_ms=0.0, stress_state='Calibrating',
             n_beats=0, alert_dispatched=False
         )
 
@@ -170,12 +305,13 @@ class PipelineState:
         self.mode = new_mode
         self.ptr = 0
         self.nn_times.clear()
+        self.recent_beats.clear()
         self.alert_latch = False
         self.det = ep.StreamingArrhythmiaDetector(bundle, fs=FS, buf_s=30, hop_s=0.5, margin_s=1.5)
         self.last_win = dict(
             primary_type='warming_up', types=[], hr_bpm=0.0,
             burden_V=0.0, burden_S=0.0, burden_Q=0.0, nrmssd=0.0,
-            rmssd_ms=0.0, stress_state='Calibrating NN...',
+            rmssd_ms=0.0, stress_state='Calibrating',
             n_beats=0, alert_dispatched=False
         )
 
@@ -214,7 +350,6 @@ async def ws_endpoint(ws: WebSocket):
         state.clients.discard(ws)
 
 async def udp_listener():
-    """Non-blocking UDP socket listener for ESP32-S3 packets."""
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.bind(('0.0.0.0', UDP_PORT))
     sock.setblocking(False)
@@ -231,7 +366,6 @@ async def udp_listener():
             await asyncio.sleep(0.005)
 
 async def inference_broadcaster():
-    """Feeds 0.5s chunks into StreamingArrhythmiaDetector and broadcasts pipeline telemetry."""
     non_critical_states = {'warming_up', 'insufficient_data', 'no_arrhythmia_detected', 'poor_quality'}
 
     while True:
@@ -248,14 +382,16 @@ async def inference_broadcaster():
                 lbl = b['label']
                 if lbl == 'N':
                     state.nn_times.append(t_val)
-                new_beats.append(dict(
+                beat_obj = dict(
                     t=t_val,
                     label=lbl,
                     pN=round(float(pr[0]), 3),
                     pS=round(float(pr[1]), 3),
                     pV=round(float(pr[2]), 3),
                     pQ=round(float(pr[3]), 3) if len(pr) > 3 else 0.0
-                ))
+                )
+                new_beats.append(beat_obj)
+                state.recent_beats.append(beat_obj)
 
             w = res['window']
             primary = w['primary_type']
@@ -267,17 +403,29 @@ async def inference_broadcaster():
 
             rmssd_ms, stress_state = derive_hrv_metrics(hr_bpm, nrmssd, state.nn_times)
 
-            # Evaluate Triage Alert Trigger (with 60s cooldown)
             now = time.time()
             if primary not in non_critical_states:
                 if (now - state.last_alert_ts) >= ALERT_COOLDOWN_SEC:
                     state.last_alert_ts = now
                     state.alert_latch = True
-                    threading.Thread(
-                        target=_send_alerts_worker,
-                        args=(primary, hr_bpm, burden_v, burden_s, rmssd_ms, stress_state, state.mode),
-                        daemon=True
-                    ).start()
+                    # Slice the last 6 seconds (1500 samples) from the detector buffer for the episode strip
+                    buf_arr = np.array(state.det.buf, dtype=np.float32)
+                    sig_slice = buf_arr[-int(6 * FS):].copy() if len(buf_arr) > 0 else np.array([])
+                    snapshot = dict(
+                        primary=primary,
+                        types=list(w['types']),
+                        hr_bpm=hr_bpm,
+                        burden_v=burden_v,
+                        burden_s=burden_s,
+                        burden_q=burden_q,
+                        nrmssd=nrmssd,
+                        rmssd_ms=rmssd_ms,
+                        stress_state=stress_state,
+                        mode=state.mode,
+                        recent_beats=list(state.recent_beats),
+                        sig_slice=sig_slice
+                    )
+                    threading.Thread(target=_send_alerts_worker, args=(snapshot,), daemon=True).start()
             else:
                 state.alert_latch = False
 

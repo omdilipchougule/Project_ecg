@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Clinical ECG Telemetry | Raspberry Pi 5</title>
+<title>Clinical ECG Telemetry</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
@@ -20,7 +20,6 @@
     --text-muted: #64748b;
     
     --cyan: #06b6d4;
-    --cyan-glow: rgba(6, 182, 212, 0.35);
     --emerald: #10b981;
     --amber: #f59e0b;
     --rose: #f43f5e;
@@ -53,8 +52,8 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding-bottom: 18px;
-    margin-bottom: 20px;
+    padding-bottom: 16px;
+    margin-bottom: 18px;
     border-bottom: 1px solid var(--border-subtle);
     flex-wrap: wrap;
     gap: 16px;
@@ -63,7 +62,7 @@
   .brand { display: flex; align-items: center; gap: 14px; }
   
   .status-orb {
-    width: 11px; height: 11px;
+    width: 10px; height: 10px;
     border-radius: 50%;
     background: var(--emerald);
     box-shadow: 0 0 12px var(--emerald);
@@ -72,24 +71,24 @@
   @keyframes pulse-orb { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.45; transform: scale(0.92); } }
 
   .brand-title h1 {
-    font-size: 20px;
+    font-size: 19px;
     font-weight: 700;
     letter-spacing: -0.025em;
     color: var(--text-primary);
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 12px;
   }
 
   .triage-pill {
     font-size: 11px;
     font-weight: 600;
-    padding: 3px 9px;
+    padding: 3px 10px;
     border-radius: 999px;
     background: rgba(16, 185, 129, 0.12);
     border: 1px solid rgba(16, 185, 129, 0.3);
     color: #34d399;
-    letter-spacing: 0.02em;
+    letter-spacing: 0.03em;
     transition: all 0.3s ease;
   }
   .triage-pill.dispatched {
@@ -97,13 +96,6 @@
     border-color: rgba(244, 63, 94, 0.5);
     color: #fda4af;
     box-shadow: 0 0 14px rgba(244, 63, 94, 0.35);
-  }
-
-  .brand-title p {
-    font-size: 12.5px;
-    color: var(--text-secondary);
-    margin-top: 3px;
-    font-weight: 400;
   }
 
   /* --- SEGMENTED CONTROLS --- */
@@ -120,7 +112,7 @@
     background: transparent;
     color: var(--text-secondary);
     border: none;
-    padding: 8px 14px;
+    padding: 7px 14px;
     border-radius: 7px;
     cursor: pointer;
     font-family: 'Inter', sans-serif;
@@ -135,20 +127,23 @@
     box-shadow: 0 2px 10px rgba(6, 182, 212, 0.3);
   }
 
-  /* --- PIPELINE TELEMETRY RIBBON --- */
+  /* --- MINIMAL PIPELINE STATUS RIBBON --- */
   .pipeline-ribbon {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
     gap: 14px;
-    margin-bottom: 20px;
+    margin-bottom: 18px;
   }
 
   .stage-card {
     background: var(--bg-surface);
     backdrop-filter: blur(12px);
-    padding: 13px 16px;
-    border-radius: 11px;
+    padding: 11px 16px;
+    border-radius: 10px;
     border: 1px solid var(--border-subtle);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
     position: relative;
     overflow: hidden;
   }
@@ -160,19 +155,17 @@
     background: linear-gradient(to bottom, var(--cyan), var(--blue));
   }
   .stage-card .st-title {
-    font-size: 11px;
-    font-weight: 700;
+    font-size: 11.5px;
+    font-weight: 600;
     text-transform: uppercase;
-    letter-spacing: 0.06em;
+    letter-spacing: 0.05em;
     color: var(--text-secondary);
-    margin-bottom: 4px;
   }
-  .stage-card .st-desc {
+  .stage-card .st-val {
     font-size: 12.5px;
-    color: var(--text-primary);
-    font-weight: 500;
+    color: #22d3ee;
+    font-weight: 600;
   }
-  .hl-cyan { color: #22d3ee; font-weight: 600; }
 
   /* --- MAIN WORKSPACE GRID --- */
   .workspace {
@@ -198,19 +191,13 @@
     align-items: center;
     padding: 14px 20px;
     border-radius: 10px;
-    margin-bottom: 18px;
+    margin-bottom: 16px;
     font-weight: 700;
-    font-size: 16px;
+    font-size: 15.5px;
     letter-spacing: 0.04em;
     text-transform: uppercase;
     transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
     border: 1px solid rgba(255, 255, 255, 0.12);
-  }
-  .diag-banner .diag-sub {
-    font-size: 11.5px;
-    font-weight: 600;
-    opacity: 0.85;
-    letter-spacing: 0.03em;
   }
 
   .state-warmup { background: linear-gradient(90deg, rgba(30, 58, 138, 0.75), rgba(15, 23, 42, 0.85)); border-color: rgba(59, 130, 246, 0.4); color: #93c5fd; }
@@ -233,13 +220,13 @@
     display: flex;
     gap: 16px;
     font-size: 11px;
-    color: rgba(148, 163, 184, 0.7);
+    color: rgba(148, 163, 184, 0.6);
     pointer-events: none;
     z-index: 2;
   }
   canvas {
     width: 100%;
-    height: 270px;
+    height: 275px;
     display: block;
   }
 
@@ -248,12 +235,12 @@
     display: grid;
     grid-template-columns: repeat(5, 1fr);
     gap: 12px;
-    margin-top: 18px;
+    margin-top: 16px;
   }
 
   .vital-card {
     background: var(--bg-elevated);
-    padding: 14px 12px;
+    padding: 13px 12px;
     border-radius: 10px;
     border: 1px solid var(--border-subtle);
     transition: transform 0.2s ease, border-color 0.2s ease;
@@ -279,31 +266,28 @@
     color: var(--text-muted);
     margin-top: 3px;
     font-weight: 500;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
   }
 
   /* --- ARTIFACT GATE & RULES FOOTER --- */
   .gate-footer {
-    margin-top: 18px;
-    padding-top: 16px;
+    margin-top: 16px;
+    padding-top: 14px;
     border-top: 1px solid var(--border-subtle);
   }
   .gate-header {
     display: flex;
     justify-content: space-between;
-    font-size: 12px;
+    font-size: 11.5px;
     font-weight: 600;
     color: var(--text-secondary);
   }
   .gauge-track {
     background: rgba(255, 255, 255, 0.06);
-    height: 9px;
+    height: 8px;
     border-radius: 999px;
     overflow: hidden;
     position: relative;
-    margin-top: 8px;
+    margin-top: 7px;
   }
   .gauge-fill {
     height: 100%;
@@ -315,10 +299,9 @@
     left: 35%; top: 0; bottom: 0;
     width: 2px;
     background: var(--rose);
-    box-shadow: 0 0 6px var(--rose);
   }
   .rule-tags {
-    margin-top: 12px;
+    margin-top: 11px;
     display: flex;
     align-items: center;
     gap: 8px;
@@ -329,7 +312,7 @@
   .rule-chip {
     background: rgba(255, 255, 255, 0.06);
     border: 1px solid var(--border-subtle);
-    padding: 3px 9px;
+    padding: 2px 9px;
     border-radius: 6px;
     font-size: 11.5px;
     color: var(--text-primary);
@@ -339,11 +322,10 @@
   .log-header {
     display: flex;
     justify-content: space-between;
-    align-items: baseline;
-    margin-bottom: 4px;
+    align-items: center;
+    margin-bottom: 12px;
   }
-  .log-header h3 { font-size: 15px; font-weight: 700; letter-spacing: -0.01em; }
-  .log-sub { font-size: 12px; color: var(--text-secondary); margin-bottom: 14px; }
+  .log-header h3 { font-size: 14.5px; font-weight: 700; letter-spacing: -0.01em; }
 
   .beat-table {
     width: 100%;
@@ -351,7 +333,7 @@
     font-size: 12.5px;
   }
   .beat-table th {
-    padding: 9px 6px;
+    padding: 8px 6px;
     text-align: center;
     border-bottom: 1px solid var(--border-highlight);
     color: var(--text-secondary);
@@ -361,7 +343,7 @@
     letter-spacing: 0.05em;
   }
   .beat-table td {
-    padding: 9px 6px;
+    padding: 8.5px 6px;
     text-align: center;
     border-bottom: 1px solid var(--border-subtle);
   }
@@ -373,12 +355,12 @@
   .beat-table tbody tr:hover { background: rgba(255, 255, 255, 0.035); }
 
   .badge {
-    padding: 3px 9px;
+    padding: 2px 8px;
     border-radius: 6px;
     font-weight: 700;
     font-size: 11.5px;
     display: inline-block;
-    min-width: 30px;
+    min-width: 28px;
   }
   .b-N { background: rgba(16, 185, 129, 0.14); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.35); }
   .b-S { background: rgba(168, 85, 247, 0.14); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.35); }
@@ -400,50 +382,47 @@
     <div class="brand-title">
       <h1>
         Clinical ECG Arrhythmia Telemetry
-        <span class="triage-pill" id="triage-status">TRIAGE ARMED • DISCORD + SMTP</span>
+        <span class="triage-pill" id="triage-status">TRIAGE ARMED</span>
       </h1>
-      <p>250 Hz AD8232 Stream • Stateless Pan-Tompkins • 27-Feature LightGBM • 30s Rule & HRV Engine</p>
     </div>
   </div>
   <div class="controls">
     <button id="btn-DEMO_NORMAL" class="active" onclick="setMode('DEMO_NORMAL')">1. Normal Sinus</button>
     <button id="btn-DEMO_ECTOPY" onclick="setMode('DEMO_ECTOPY')">2. Inject Arrhythmia</button>
     <button id="btn-DEMO_ARTIFACT" onclick="setMode('DEMO_ARTIFACT')">3. Motion Artifact</button>
-    <button id="btn-ESP32_LIVE" onclick="setMode('ESP32_LIVE')">4. ESP32-S3 Live UDP</button>
+    <button id="btn-ESP32_LIVE" onclick="setMode('ESP32_LIVE')">4. ESP32-S3 Live</button>
   </div>
 </header>
 
 <section class="pipeline-ribbon">
   <div class="stage-card">
-    <div class="st-title">Stage 1 • Signal & Buffer</div>
-    <div class="st-desc">0.5–40 Hz SOS | Fill: <span id="st-buf" class="mono hl-cyan">0.0</span>/30.0s</div>
+    <span class="st-title">1 • Buffer</span>
+    <span class="st-val mono"><span id="st-buf">0.0</span>s</span>
   </div>
   <div class="stage-card">
-    <div class="st-title">Stage 2 • R-Peak & HRV</div>
-    <div class="st-desc">90th-Pct Envelope + 1.5s Lookahead</div>
+    <span class="st-title">2 • R-Peak & HRV</span>
+    <span class="st-val mono">Active</span>
   </div>
   <div class="stage-card">
-    <div class="st-title">Stage 3 • 4-Class LightGBM</div>
-    <div class="st-desc">Hop Compute: <span id="st-comp" class="mono hl-cyan">0.0</span> ms</div>
+    <span class="st-title">3 • LightGBM</span>
+    <span class="st-val mono">4-Class</span>
   </div>
   <div class="stage-card">
-    <div class="st-title">Stage 4 • Clinical Rule Gate</div>
-    <div class="st-desc">Source: <span id="st-mode" class="mono hl-cyan">DEMO_NORMAL</span></div>
+    <span class="st-title">4 • Source</span>
+    <span class="st-val mono" id="st-mode">DEMO_NORMAL</span>
   </div>
 </section>
 
 <main class="workspace">
   <div class="panel">
     <div id="diag-banner" class="diag-banner state-warmup">
-      <span id="diag-title">WARMING UP 30S BUFFER...</span>
-      <span class="diag-sub mono" id="diag-meta">AWAITING WINDOW LOCK</span>
+      <span id="diag-title">PRIMARY DIAGNOSIS: WARMING UP</span>
     </div>
 
     <div class="scope-wrapper">
       <div class="scope-overlay mono">
         <span>LEAD II • 25 mm/s</span>
-        <span>GAIN: 10 mm/mV</span>
-        <span>NOTCH: 0.5–40 Hz</span>
+        <span>10 mm/mV</span>
       </div>
       <canvas id="ecgCanvas"></canvas>
     </div>
@@ -452,47 +431,47 @@
       <div class="vital-card">
         <div class="v-label"><span>Heart Rate</span><span>BPM</span></div>
         <div class="v-value mono" id="m-hr" style="color: var(--emerald);">--</div>
-        <div class="v-sub" id="m-hr-sub">Sinus Cadence</div>
+        <div class="v-sub" id="m-hr-sub">Sinus Range</div>
       </div>
 
       <div class="vital-card">
-        <div class="v-label"><span>PVC Burden</span><span>CLASS V</span></div>
-        <div class="v-value mono" id="m-bv" style="color: var(--rose);">0.0%</div>
-        <div class="v-sub">Ventricular Ectopy</div>
+        <div class="v-label"><span>PVC Burden</span><span>V</span></div>
+        <div class="v-value mono" id="m-bv" style="color: var(--rose);">0%</div>
+        <div class="v-sub">Ventricular</div>
       </div>
 
       <div class="vital-card">
-        <div class="v-label"><span>PAC Burden</span><span>CLASS S</span></div>
-        <div class="v-value mono" id="m-bs" style="color: var(--violet);">0.0%</div>
-        <div class="v-sub">Supraventricular</div>
+        <div class="v-label"><span>PAC Burden</span><span>S</span></div>
+        <div class="v-value mono" id="m-bs" style="color: var(--violet);">0%</div>
+        <div class="v-sub">Atrial</div>
       </div>
 
       <div class="vital-card">
         <div class="v-label"><span>HRV (RMSSD)</span><span>ANS</span></div>
         <div class="v-value mono" id="m-hrv" style="color: var(--cyan);">-- ms</div>
-        <div class="v-sub" id="m-stress">Calibrating NN...</div>
+        <div class="v-sub" id="m-stress">Calibrating</div>
       </div>
 
       <div class="vital-card">
         <div class="v-label"><span>Window Beats</span><span>nRMSSD</span></div>
-        <div class="v-value mono" id="m-nn">0 <span style="font-size:15px; color:var(--text-secondary);">/ 0.00</span></div>
-        <div class="v-sub">30s Rolling Count</div>
+        <div class="v-value mono" id="m-nn">0 <span style="font-size:14px; color:var(--text-secondary);">/ 0</span></div>
+        <div class="v-sub">30s Count</div>
       </div>
     </div>
 
     <div class="gate-footer">
       <div class="gate-header">
-        <span>Stage 4 Artifact Gate: Window Q-Noise Burden (<span id="q-val" class="mono" style="color:var(--amber);">0.0%</span>)</span>
-        <span style="color:var(--rose);">35.0% False-Alarm Suppression Threshold</span>
+        <span>Q-Noise Burden (<span id="q-val" class="mono" style="color:var(--amber);">0%</span>)</span>
+        <span style="color:var(--rose);">35% Suppression Threshold</span>
       </div>
       <div class="gauge-track">
         <div id="q-bar" class="gauge-fill" style="width:0%; background:var(--emerald);"></div>
-        <div class="gauge-marker" title="35% Suppression Gate"></div>
+        <div class="gauge-marker"></div>
       </div>
       <div class="rule-tags">
-        <strong>Active Window Rules:</strong>
+        <strong>Active Rules:</strong>
         <div id="m-types" style="display:flex; gap:6px; flex-wrap:wrap;">
-          <span class="rule-chip">none</span>
+          <span class="rule-chip mono">none</span>
         </div>
       </div>
     </div>
@@ -500,10 +479,8 @@
 
   <div class="panel">
     <div class="log-header">
-      <h3>Stage 3: Per-Beat Classification</h3>
-      <span class="mono" style="font-size:11px; color:var(--cyan);">1.5s MARGIN</span>
+      <h3>Per-Beat Classification</h3>
     </div>
-    <p class="log-sub">Calibrated LightGBM probabilities per R-peak</p>
     <table class="beat-table">
       <thead>
         <tr><th>Time</th><th>Class</th><th>P(N)</th><th>P(S)</th><th>P(V)</th><th>P(Q)</th></tr>
@@ -516,11 +493,9 @@
 <script>
 const canvas = document.getElementById('ecgCanvas');
 const ctx = canvas.getContext('2d');
-const MAX_PTS = 750; // 6 seconds at 125 Hz display rate
+const MAX_PTS = 750;
 let trace = new Array(MAX_PTS).fill(0);
-let beatTimes = [];
 
-// Handle crisp High-DPI / Retina scaling
 function resizeCanvas() {
   const rect = canvas.getBoundingClientRect();
   const dpr = window.devicePixelRatio || 1;
@@ -541,11 +516,9 @@ function setMode(mode) {
   const btn = document.getElementById('btn-' + mode);
   if (btn) btn.classList.add('active');
   document.getElementById('beat-log').innerHTML = '';
-  beatTimes = [];
 }
 
 function drawGrid(w, h) {
-  // Minor 1mm clinical grid
   ctx.strokeStyle = 'rgba(16, 185, 129, 0.045)';
   ctx.lineWidth = 0.6;
   ctx.beginPath();
@@ -553,7 +526,6 @@ function drawGrid(w, h) {
   for (let y = 0; y < h; y += 14) { ctx.moveTo(0, y); ctx.lineTo(w, y); }
   ctx.stroke();
 
-  // Major 5mm clinical grid
   ctx.strokeStyle = 'rgba(16, 185, 129, 0.11)';
   ctx.lineWidth = 1;
   ctx.beginPath();
@@ -573,7 +545,6 @@ function renderLoop() {
   const mid = h / 2;
   const scaleY = h * 0.24;
 
-  // Waveform path
   ctx.beginPath();
   for (let i = 0; i < trace.length; i++) {
     const x = (i / (MAX_PTS - 1)) * w;
@@ -582,7 +553,6 @@ function renderLoop() {
     else ctx.lineTo(x, y);
   }
 
-  // Subtle cyan glow & stroke
   ctx.strokeStyle = '#06b6d4';
   ctx.lineWidth = 2.2;
   ctx.lineJoin = 'round';
@@ -592,7 +562,6 @@ function renderLoop() {
   ctx.stroke();
   ctx.shadowBlur = 0;
 
-  // Leading-edge phosphor head
   const lastX = w - 2;
   const lastY = mid - (trace[trace.length - 1] * scaleY);
   ctx.beginPath();
@@ -607,30 +576,6 @@ function renderLoop() {
 }
 requestAnimationFrame(renderLoop);
 
-// Fallback client-side RMSSD computation if server.py hasn't added rmssd_ms yet
-function computeClientRMSSD(timesSec, nrmssdFallback, hrBpm) {
-  if (timesSec.length >= 4) {
-    const rrs = [];
-    for (let i = 1; i < timesSec.length; i++) {
-      const dt = (timesSec[i] - timesSec[i - 1]) * 1000;
-      if (dt > 300 && dt < 2000) rrs.push(dt);
-    }
-    if (rrs.length >= 2) {
-      let sumSq = 0;
-      for (let i = 1; i < rrs.length; i++) {
-        const diff = rrs[i] - rrs[i - 1];
-        sumSq += diff * diff;
-      }
-      return Math.sqrt(sumSq / (rrs.length - 1));
-    }
-  }
-  if (nrmssdFallback > 0 && hrBpm > 0) {
-    const meanRR = 60000 / hrBpm;
-    return nrmssdFallback * meanRR;
-  }
-  return 0;
-}
-
 const ws = new WebSocket(`ws://${location.host}/ws`);
 ws.onopen = () => { document.getElementById('ws-orb').style.background = 'var(--emerald)'; };
 ws.onclose = () => { document.getElementById('ws-orb').style.background = 'var(--rose)'; };
@@ -638,10 +583,8 @@ ws.onclose = () => { document.getElementById('ws-orb').style.background = 'var(-
 ws.onmessage = (ev) => {
   const d = JSON.parse(ev.data);
   document.getElementById('st-buf').textContent = Number(d.buf_fill_s).toFixed(1);
-  document.getElementById('st-comp').textContent = Number(d.compute_ms).toFixed(2);
   document.getElementById('st-mode').textContent = d.mode;
 
-  // Append incoming signal chunk
   if (Array.isArray(d.signal) && d.signal.length) {
     trace.push(...d.signal);
     if (trace.length > MAX_PTS) trace.splice(0, trace.length - MAX_PTS);
@@ -650,11 +593,9 @@ ws.onmessage = (ev) => {
   const w = d.window;
   const banner = document.getElementById('diag-banner');
   const titleEl = document.getElementById('diag-title');
-  const metaEl = document.getElementById('diag-meta');
 
   const cleanPrimary = w.primary_type.replace(/_/g, ' ').toUpperCase();
   titleEl.textContent = `PRIMARY DIAGNOSIS: ${cleanPrimary}`;
-  metaEl.textContent = w.hr_bpm > 0 ? `${w.hr_bpm} BPM • ${w.n_beats} BEATS` : 'BUFFERING...';
 
   banner.className = 'diag-banner ';
   if (w.primary_type === 'no_arrhythmia_detected') banner.classList.add('state-normal');
@@ -662,43 +603,32 @@ ws.onmessage = (ev) => {
   else if (w.primary_type === 'insufficient_data' || w.primary_type === 'warming_up') banner.classList.add('state-warmup');
   else banner.classList.add('state-critical');
 
-  // Update Triage Pill if alert dispatched
   const triagePill = document.getElementById('triage-status');
   if (w.alert_dispatched) {
-    triagePill.textContent = `🚨 TRIAGE DISPATCHED: ${cleanPrimary}`;
+    triagePill.textContent = `TRIAGE SENT • ${cleanPrimary}`;
     triagePill.classList.add('dispatched');
+  } else {
+    triagePill.textContent = `TRIAGE ARMED`;
+    triagePill.classList.remove('dispatched');
   }
 
-  // Track beat timestamps for HRV fallback
-  if (Array.isArray(d.new_beats)) {
-    d.new_beats.forEach(b => {
-      if (b.label === 'N') beatTimes.push(parseFloat(b.t));
-    });
-    if (beatTimes.length > 40) beatTimes.splice(0, beatTimes.length - 40);
-  }
-
-  // Vitals update
   document.getElementById('m-hr').textContent = w.hr_bpm > 0 ? `${w.hr_bpm}` : '--';
-  document.getElementById('m-hr-sub').textContent = w.hr_bpm > 100 ? 'Tachycardic Range' : (w.hr_bpm > 0 && w.hr_bpm < 60 ? 'Bradycardic Range' : 'Normal Sinus Range');
+  document.getElementById('m-hr-sub').textContent = w.hr_bpm > 100 ? 'Tachycardic' : (w.hr_bpm > 0 && w.hr_bpm < 60 ? 'Bradycardic' : 'Sinus Range');
   document.getElementById('m-bv').textContent = `${w.burden_V}%`;
   document.getElementById('m-bs').textContent = `${w.burden_S}%`;
   document.getElementById('m-nn').innerHTML = `${w.n_beats} <span style="font-size:14px; color:var(--text-secondary);">/ ${w.nrmssd}</span>`;
 
-  // HRV RMSSD display
-  const rmssdVal = w.rmssd_ms !== undefined ? w.rmssd_ms : computeClientRMSSD(beatTimes, w.nrmssd, w.hr_bpm);
   const hrvEl = document.getElementById('m-hrv');
   const stressEl = document.getElementById('m-stress');
-  if (rmssdVal > 0) {
-    hrvEl.textContent = `${rmssdVal.toFixed(1)} ms`;
-    const stressLabel = w.stress_state || (rmssdVal < 22 ? 'High Sympathetic Load' : (rmssdVal < 42 ? 'Moderate Tone' : 'Optimal Vagal Tone'));
-    stressEl.textContent = stressLabel;
-    hrvEl.style.color = rmssdVal < 22 ? 'var(--amber)' : 'var(--cyan)';
+  if (w.rmssd_ms > 0) {
+    hrvEl.textContent = `${w.rmssd_ms.toFixed(1)} ms`;
+    stressEl.textContent = w.stress_state || 'Normal';
+    hrvEl.style.color = w.rmssd_ms < 22 ? 'var(--amber)' : 'var(--cyan)';
   } else {
     hrvEl.textContent = '-- ms';
-    stressEl.textContent = 'Calibrating NN...';
+    stressEl.textContent = 'Calibrating';
   }
 
-  // Rule chips
   const typesContainer = document.getElementById('m-types');
   if (w.types && w.types.length) {
     typesContainer.innerHTML = w.types.map(t => `<span class="rule-chip mono">${t}</span>`).join('');
@@ -706,13 +636,11 @@ ws.onmessage = (ev) => {
     typesContainer.innerHTML = `<span class="rule-chip mono">none</span>`;
   }
 
-  // Artifact Q-Gate Gauge
   document.getElementById('q-val').textContent = `${w.burden_Q}%`;
   const qBar = document.getElementById('q-bar');
   qBar.style.width = `${Math.min(100, w.burden_Q)}%`;
   qBar.style.background = w.burden_Q > 35.0 ? 'var(--amber)' : 'var(--emerald)';
 
-  // Prepend new classified beats
   const tbody = document.getElementById('beat-log');
   d.new_beats.forEach(b => {
     const tr = document.createElement('tr');
