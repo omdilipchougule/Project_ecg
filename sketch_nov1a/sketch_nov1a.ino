@@ -3,8 +3,8 @@
 
 // --- 1. NETWORK CONFIGURATION ---
 const char* WIFI_SSID = "om";
-const char* WIFI_PASS = "12345678";
-const char* PI_IP     = "10.20.211.48"; // Replace with your Raspberry Pi 5 IP
+const char* WIFI_PASS = "7020344293";
+const char* PI_IP     = "192.168.39.48"; // Raspberry Pi IP
 const uint16_t UDP_PORT = 5005;
 
 // --- 2. HARDWARE PINOUT (MATCHES PROTO-SHIELD SCHEMATIC) ---
