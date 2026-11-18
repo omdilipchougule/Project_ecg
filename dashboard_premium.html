@@ -370,10 +370,95 @@
     .b-V { background: rgba(244, 63, 94, 0.16); color: #fb7185; border: 1px solid rgba(244, 63, 94, 0.4); }
     .b-Q { background: rgba(245, 158, 11, 0.14); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.35); }
 
+    /* --- TELEMETRY & FALLBACK MONITOR --- */
+    .telemetry-bar {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      background: rgba(12, 17, 26, 0.7);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 9px;
+      padding: 9px 16px;
+      margin-bottom: 16px;
+      font-size: 11.5px;
+    }
+    .telem-item {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+    .telem-label {
+      font-size: 9.5px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      color: var(--text-muted);
+      text-transform: uppercase;
+    }
+    .telem-val {
+      font-size: 12px;
+      font-weight: 600;
+      color: #ffffff;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .badge-real {
+      background: rgba(16, 185, 129, 0.15);
+      color: #34d399;
+      border: 1px solid rgba(16, 185, 129, 0.35);
+      padding: 1px 7px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .badge-fallback {
+      background: rgba(239, 68, 68, 0.2);
+      color: #f87171;
+      border: 1px solid rgba(239, 68, 68, 0.45);
+      padding: 1px 7px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 700;
+      animation: pulse-fb 1.5s infinite;
+    }
+    .badge-sim {
+      background: rgba(245, 158, 11, 0.15);
+      color: #fbbf24;
+      border: 1px solid rgba(245, 158, 11, 0.35);
+      padding: 1px 7px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 700;
+    }
+    @keyframes pulse-fb {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.55; }
+    }
+    .fb-alert-banner {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: linear-gradient(90deg, rgba(239, 68, 68, 0.22), rgba(185, 28, 28, 0.12));
+      border: 1px solid rgba(248, 113, 113, 0.5);
+      border-radius: 8px;
+      padding: 10px 16px;
+      margin-bottom: 16px;
+      color: #fca5a5;
+      animation: alert-slide 0.3s ease-out;
+    }
+    @keyframes alert-slide {
+      from { transform: translateY(-6px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+    .fb-alert-icon { font-size: 18px; }
+    .fb-alert-text { display: flex; flex-direction: column; font-size: 12px; }
+    .fb-alert-text strong { font-size: 13px; color: #fee2e2; letter-spacing: 0.02em; }
+
     @media (max-width: 1150px) {
       .workspace { grid-template-columns: 1fr; }
       .vitals-grid { grid-template-columns: repeat(3, 1fr); }
       .pipeline-ribbon { grid-template-columns: repeat(2, 1fr); }
+      .telemetry-bar { grid-template-columns: repeat(2, 1fr); }
     }
   </style>
 </head>
@@ -411,6 +496,35 @@
     <span class="st-val mono" id="st-mode">CONNECTING...</span>
   </div>
 </section>
+
+<!-- Active Telemetry & Hardware Connection Monitor Bar -->
+<section class="telemetry-bar" id="telemetry-bar">
+  <div class="telem-item">
+    <span class="telem-label">Data Ingestion Origin</span>
+    <span class="telem-val" id="tel-origin"><span class="badge-real">● CLINICAL PATIENT DB</span></span>
+  </div>
+  <div class="telem-item">
+    <span class="telem-label">Transfer / Sample Rate</span>
+    <span class="telem-val mono" id="tel-rate">250.0 Hz</span>
+  </div>
+  <div class="telem-item">
+    <span class="telem-label">Stream Health State</span>
+    <span class="telem-val" id="tel-state"><span style="color:#34d399; font-weight:600;">ACTIVE STREAM</span></span>
+  </div>
+  <div class="telem-item">
+    <span class="telem-label">Packets / Queue Telemetry</span>
+    <span class="telem-val mono" id="tel-pkts">Initializing...</span>
+  </div>
+</section>
+
+<!-- High-Visibility Fallback Mode Alert Banner -->
+<div id="fb-alert" class="fb-alert-banner" style="display:none;">
+  <span class="fb-alert-icon">⚠️</span>
+  <div class="fb-alert-text">
+    <strong id="fb-alert-heading">TELEMETRY FALLBACK DETECTED</strong>
+    <span id="fb-alert-detail">Live sensor stream starved or database file missing. Model running on fallback zeros/synthetic wave.</span>
+  </div>
+</div>
 
 <main class="workspace">
   <div class="panel">
@@ -688,6 +802,45 @@ ws.onmessage = (ev) => {
   }
   if (d.mode) {
     updateModeDisplay(d.mode);
+  }
+
+  // Update live telemetry, connection state & fallback monitoring
+  if (d.telemetry) {
+    const t = d.telemetry;
+    const originEl = document.getElementById('tel-origin');
+    const rateEl = document.getElementById('tel-rate');
+    const stateEl = document.getElementById('tel-state');
+    const pktsEl = document.getElementById('tel-pkts');
+    const fbAlert = document.getElementById('fb-alert');
+    const fbDetail = document.getElementById('fb-alert-detail');
+
+    if (t.is_fallback) {
+      originEl.innerHTML = `<span class="badge-fallback">⚠️ FALLBACK MODE</span>`;
+      stateEl.innerHTML = `<span style="color:#f87171; font-weight:700;">${t.status}</span>`;
+      if (fbAlert) {
+        fbAlert.style.display = 'flex';
+        fbDetail.textContent = t.detail;
+      }
+    } else {
+      if (t.mode === 'ESP32_LIVE') {
+        originEl.innerHTML = `<span class="badge-real">● LIVE AD8232 HARDWARE</span>`;
+      } else if (t.mode === 'DEMO_ARTIFACT') {
+        originEl.innerHTML = `<span class="badge-sim">◆ MOTION ARTIFACT SIM</span>`;
+      } else {
+        originEl.innerHTML = `<span class="badge-real">● CLINICAL DB (Icentia11k)</span>`;
+      }
+      stateEl.innerHTML = `<span style="color:#34d399; font-weight:600;">ACTIVE STREAM</span>`;
+      if (fbAlert) {
+        fbAlert.style.display = 'none';
+      }
+    }
+
+    rateEl.textContent = `${t.rate_hz} Hz`;
+    if (t.mode === 'ESP32_LIVE') {
+      pktsEl.textContent = `${t.packets_total} pkts (${t.last_packet_s > 0 ? t.last_packet_s + 's ago' : 'live'})`;
+    } else {
+      pktsEl.textContent = `Buffer: ${t.queue_len} samples`;
+    }
   }
 
   // Ingest ECG signal directly without offset subtraction

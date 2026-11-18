@@ -311,6 +311,12 @@ class PipelineState:
         self.clients = set()
         self.last_alert_ts = 0.0
         self.alert_latch = False
+        self.last_esp32_packet_time = 0.0
+        self.esp32_packet_count = 0
+        self.esp32_samples_received = 0
+        self.packet_rate_hz = 0.0
+        self._last_calc_ts = time.time()
+        self._last_calc_samples = 0
         self.last_win = dict(
             primary_type='warming_up', types=[], hr_bpm=0.0,
             burden_V=0.0, burden_S=0.0, burden_Q=0.0, nrmssd=0.0,
@@ -372,6 +378,9 @@ async def ws_endpoint(ws: WebSocket):
                         if np.max(sig) > 10.0:
                             sig = (sig - 2048.0) / 450.0
                         state.udp_queue.extend(sig.tolist())
+                        state.last_esp32_packet_time = time.time()
+                        state.esp32_packet_count += 1
+                        state.esp32_samples_received += len(sig)
             except Exception:
                 pass
     except WebSocketDisconnect:
@@ -399,6 +408,9 @@ async def udp_listener():
                 print(f"[UDP] Connection established! Receiving live ECG stream from ESP32 at {addr}")
                 connected_esp = True
             state.udp_queue.extend(vals)
+            state.last_esp32_packet_time = time.time()
+            state.esp32_packet_count += 1
+            state.esp32_samples_received += len(vals)
         except Exception:
             await asyncio.sleep(0.005)
 
@@ -481,8 +493,57 @@ async def inference_broadcaster():
                 alert_dispatched=state.alert_latch
             )
 
+        now_ts = time.time()
+        is_live_mode = (state.mode == 'ESP32_LIVE')
+        time_since_esp = (now_ts - state.last_esp32_packet_time) if state.last_esp32_packet_time > 0 else 999.0
+
+        has_real_normal = os.path.exists(os.path.join(META_DIR, 'demo_normal.npy'))
+        has_real_ectopy = os.path.exists(os.path.join(META_DIR, 'demo_ectopy.npy'))
+
+        if is_live_mode:
+            is_fallback = (time_since_esp > 2.0)
+            if is_fallback:
+                stream_status = "FALLBACK_STARVED"
+                source_detail = f"ESP32-S3 Stream Starved (no packets for {time_since_esp:.1f}s)"
+            else:
+                stream_status = "LIVE_HARDWARE"
+                source_detail = "AD8232 Hardware (250 Hz Active Stream)"
+        elif state.mode == 'DEMO_NORMAL':
+            is_fallback = not has_real_normal
+            stream_status = "DATABASE_REAL" if has_real_normal else "SYNTHETIC_FALLBACK"
+            source_detail = "Icentia11k Clinical DB (Real Normal Sinus)" if has_real_normal else "Synthetic Fallback Wave"
+        elif state.mode == 'DEMO_ECTOPY':
+            is_fallback = not has_real_ectopy
+            stream_status = "DATABASE_REAL" if has_real_ectopy else "SYNTHETIC_FALLBACK"
+            source_detail = "Icentia11k Clinical DB (Real Ectopic Arrhythmia)" if has_real_ectopy else "Synthetic Fallback Wave"
+        else:
+            is_fallback = False
+            stream_status = "ARTIFACT_SIMULATION"
+            source_detail = "Motion / Tremor Noise Simulation"
+
+        dt_calc = now_ts - state._last_calc_ts
+        if dt_calc >= 1.0:
+            if is_live_mode:
+                state.packet_rate_hz = round((state.esp32_samples_received - state._last_calc_samples) / dt_calc, 1)
+            else:
+                state.packet_rate_hz = 250.0
+            state._last_calc_ts = now_ts
+            state._last_calc_samples = state.esp32_samples_received
+
+        telemetry_info = {
+            "mode": state.mode,
+            "status": stream_status,
+            "detail": source_detail,
+            "is_fallback": is_fallback,
+            "rate_hz": state.packet_rate_hz,
+            "last_packet_s": round(time_since_esp, 1) if (is_live_mode and state.last_esp32_packet_time > 0) else 0.0,
+            "packets_total": state.esp32_packet_count,
+            "queue_len": len(state.udp_queue) if is_live_mode else len(state.det.buf)
+        }
+
         payload = json.dumps(dict(
             mode=state.mode,
+            telemetry=telemetry_info,
             compute_ms=round(comp_ms, 2),
             buf_fill_s=round(len(state.det.buf) / FS, 1),
             signal=[round(float(x), 4) for x in chunk[::2]], 
