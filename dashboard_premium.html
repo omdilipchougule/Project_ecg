@@ -454,6 +454,40 @@
     .fb-alert-text { display: flex; flex-direction: column; font-size: 12px; }
     .fb-alert-text strong { font-size: 13px; color: #fee2e2; letter-spacing: 0.02em; }
 
+    @keyframes row-flash-anim {
+      0% { background: rgba(6, 182, 212, 0.4); }
+      100% { background: transparent; }
+    }
+    .row-flash {
+      animation: row-flash-anim 2.5s ease-out;
+    }
+    #toast-container {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      z-index: 9999;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      pointer-events: none;
+    }
+    .toast-item {
+      background: #0f172a;
+      border: 1px solid rgba(239, 68, 68, 0.6);
+      border-left: 4px solid #ef4444;
+      color: #ffffff;
+      padding: 12px 16px;
+      border-radius: 8px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+      font-size: 12px;
+      pointer-events: auto;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      animation: alert-slide 0.3s ease-out;
+      min-width: 280px;
+    }
+
     /* --- PATIENT CLINICAL HISTORY & RECORDS SECTION --- */
     .patient-history-section {
       background: var(--bg-surface);
@@ -904,6 +938,7 @@
       <span class="ph-active-badge mono" id="ph-active-banner">MONITORING: PT-LIVE (Live Subject)</span>
     </div>
     <div class="ph-actions">
+      <button class="ph-btn-subtle" onclick="exportHolterReport()">📄 Export Holter PDF Report</button>
       <button class="ph-btn-subtle" onclick="openAddPatientModal()">+ Register Patient</button>
       <button class="ph-btn-primary" onclick="refreshPatientRecords()">⟳ Refresh History</button>
     </div>
@@ -1351,6 +1386,70 @@ ws.onmessage = (ev) => {
       while (tbody.children.length > 13) tbody.removeChild(tbody.lastChild);
     });
   }
+
+  // Real-time Push: Irregular Arrhythmia Episodes
+  if (Array.isArray(d.new_episodes) && d.new_episodes.length) {
+    const tbody = document.getElementById('episodes-table-body');
+    const countEl = document.getElementById('count-episodes');
+    
+    d.new_episodes.forEach(ep => {
+      if (ep.patient_id === currentActivePatientId) {
+        if (countEl) {
+          const cur = parseInt(countEl.textContent) || 0;
+          countEl.textContent = cur + 1;
+        }
+        if (tbody) {
+          if (tbody.children.length === 1 && tbody.children[0].innerText.includes('No irregular episodes')) {
+            tbody.innerHTML = '';
+          }
+          const tr = document.createElement('tr');
+          tr.className = 'row-flash';
+          tr.innerHTML = `
+            <td style="color:var(--text-secondary);">${ep.timestamp}</td>
+            <td style="color:#fb7185; font-weight:700;">${ep.primary_diagnosis}</td>
+            <td style="color:#c084fc;">${ep.triggered_rules || 'none'}</td>
+            <td style="color:#ffffff; font-weight:700;">${ep.hr_bpm ? Number(ep.hr_bpm).toFixed(1) + ' BPM' : '--'}</td>
+            <td style="color:${ep.burden_v > 0 ? '#fb7185' : '#ffffff'};">${ep.burden_v}%</td>
+            <td style="color:${ep.burden_s > 0 ? '#c084fc' : '#ffffff'};">${ep.burden_s}%</td>
+            <td style="color:#38bdf8;">${ep.rmssd_ms ? Number(ep.rmssd_ms).toFixed(1) + ' ms' : '--'}</td>
+            <td><span style="font-size:10px; background:rgba(255,255,255,0.06); padding:2px 6px; border-radius:4px;">${ep.telemetry_source}</span></td>
+          `;
+          tbody.insertBefore(tr, tbody.firstChild);
+          while (tbody.children.length > 50) tbody.removeChild(tbody.lastChild);
+        }
+      }
+    });
+  }
+
+  // Real-time Push: Telemedicine Alerts Dispatched
+  if (Array.isArray(d.new_alerts) && d.new_alerts.length) {
+    const tbody = document.getElementById('alerts-table-body');
+    const countEl = document.getElementById('count-alerts');
+
+    d.new_alerts.forEach(al => {
+      if (countEl) {
+        const cur = parseInt(countEl.textContent) || 0;
+        countEl.textContent = cur + 1;
+      }
+      if (tbody) {
+        if (tbody.children.length === 1 && tbody.children[0].innerText.includes('No telemedicine alerts')) {
+          tbody.innerHTML = '';
+        }
+        const tr = document.createElement('tr');
+        tr.className = 'row-flash';
+        tr.innerHTML = `
+          <td style="color:var(--text-secondary);">${al.timestamp}</td>
+          <td style="color:#f87171; font-weight:700;">🚨 ${al.diagnosis}</td>
+          <td style="color:#38bdf8;">${al.channels}</td>
+          <td style="color:#ffffff;">${al.recipient || 'Physician'}</td>
+          <td><span style="background:rgba(16,185,129,0.15); color:#34d399; border:1px solid rgba(16,185,129,0.3); padding:2px 6px; border-radius:4px; font-weight:700; font-size:10px;">${al.status}</span></td>
+        `;
+        tbody.insertBefore(tr, tbody.firstChild);
+        while (tbody.children.length > 50) tbody.removeChild(tbody.lastChild);
+      }
+      showToastAlert(al);
+    });
+  }
 };
 
 // --- PATIENT HEALTH RECORD & HISTORY MANAGEMENT ---
@@ -1441,7 +1540,10 @@ async function loadPatientDirectory() {
             <div class="pt-card-name">${p.name}</div>
             <div class="pt-card-meta">${p.age ? p.age + 'y • ' : ''}${p.gender || 'Patient'} | Episodes: <strong>${p.episode_count || 0}</strong></div>
             <div class="pt-card-notes">${p.medical_notes ? p.medical_notes : 'No clinical notes recorded.'}</div>
-            ${!isActive ? `<button class="pt-card-btn" onclick="setActivePatient('${p.patient_id}')">Select for Monitoring</button>` : ''}
+            <div style="display:flex; gap:6px; margin-top:8px;">
+              ${!isActive ? `<button class="pt-card-btn" style="flex:1;" onclick="setActivePatient('${p.patient_id}')">Select</button>` : '<button class="pt-card-btn" style="flex:1; border-color:#06b6d4; color:#22d3ee;" disabled>Active</button>'}
+              <button class="pt-card-btn" style="flex:1;" onclick="exportHolterReport('${p.patient_id}')">📄 Report</button>
+            </div>
           </div>
         `;
       }).join('');
@@ -1522,6 +1624,35 @@ async function refreshPatientRecords() {
   if (currentPhTab === 'episodes') loadPatientEpisodes();
   else if (currentPhTab === 'alerts') loadPatientAlerts();
   else if (currentPhTab === 'directory') loadPatientDirectory();
+}
+
+function showToastAlert(al) {
+  let container = document.getElementById('toast-container');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'toast-container';
+    document.body.appendChild(container);
+  }
+  const toast = document.createElement('div');
+  toast.className = 'toast-item';
+  toast.innerHTML = `
+    <span style="font-size:18px;">🚨</span>
+    <div>
+      <div style="font-weight:700; color:#fca5a5;">Telemedicine Alert Dispatched</div>
+      <div style="color:#e2e8f0; font-size:11px; margin-top:2px;">${al.diagnosis} &bull; ${al.recipient || 'Physician'}</div>
+    </div>
+  `;
+  container.appendChild(toast);
+  setTimeout(() => {
+    toast.style.opacity = '0';
+    toast.style.transition = 'opacity 0.4s ease';
+    setTimeout(() => toast.remove(), 400);
+  }, 4500);
+}
+
+function exportHolterReport(pid) {
+  const targetId = pid || currentActivePatientId;
+  window.open('/api/records/report/' + encodeURIComponent(targetId), '_blank');
 }
 
 // Initial load of patient records on dashboard startup

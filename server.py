@@ -1,5 +1,5 @@
 """server.py - Raspberry Pi 5 FastAPI + WebSocket + UDP Telemetry Server for ECG Arrhythmia Pipeline."""
-import os, sys, io, uuid, time, json, socket, asyncio, threading, smtplib
+import os, sys, io, uuid, time, json, socket, asyncio, threading, smtplib, base64
 from typing import Optional, List, Dict
 import urllib.request
 from email.message import EmailMessage
@@ -157,27 +157,36 @@ def derive_hrv_metrics(hr_bpm, nrmssd, nn_times_deque):
         stress_state = "Optimal Vagal"
     return rmssd_ms, stress_state
 
-def render_episode_png(sig_slice, diagnosis, hr_bpm):
+def render_episode_png(sig_slice, diagnosis, hr_bpm, dark_theme=True):
     """Renders a 6-second clinical ECG strip to an in-memory PNG buffer."""
     try:
         import matplotlib
         matplotlib.use('Agg')
         import matplotlib.pyplot as plt
-        fig, ax = plt.subplots(figsize=(8.5, 2.4), dpi=130)
-        fig.patch.set_facecolor('#06080d')
-        ax.set_facecolor('#06080d')
+        fig, ax = plt.subplots(figsize=(8.5, 2.3), dpi=130)
+        
+        bg_col = '#06080d' if dark_theme else '#ffffff'
+        trace_col = '#06b6d4' if dark_theme else '#b91c1c'
+        grid_col = '#10b981' if dark_theme else '#fca5a5'
+        grid_alpha = 0.14 if dark_theme else 0.45
+        spine_col = '#1e293b' if dark_theme else '#cbd5e1'
+        txt_col = '#f8fafc' if dark_theme else '#0f172a'
+        sub_col = '#94a3b8' if dark_theme else '#475569'
+
+        fig.patch.set_facecolor(bg_col)
+        ax.set_facecolor(bg_col)
 
         t = np.arange(len(sig_slice)) / float(FS)
-        ax.grid(True, which='both', color='#10b981', alpha=0.14, linestyle='-', linewidth=0.6)
-        ax.plot(t, sig_slice, color='#06b6d4', linewidth=1.4)
+        ax.grid(True, which='both', color=grid_col, alpha=grid_alpha, linestyle='-', linewidth=0.6)
+        ax.plot(t, sig_slice, color=trace_col, linewidth=1.4)
         ax.set_title(
             f"6.0s Trigger Episode  |  {diagnosis.replace('_', ' ').upper()}  |  {hr_bpm} BPM",
-            color='#f8fafc', fontsize=10, fontweight='bold', pad=8
+            color=txt_col, fontsize=10, fontweight='bold', pad=8
         )
-        ax.set_xlabel("Time (seconds)", color='#94a3b8', fontsize=8)
-        ax.tick_params(colors='#64748b', labelsize=8)
+        ax.set_xlabel("Time (seconds)", color=sub_col, fontsize=8)
+        ax.tick_params(colors=sub_col, labelsize=8)
         for spine in ax.spines.values():
-            spine.set_color('#1e293b')
+            spine.set_color(spine_col)
 
         buf = io.BytesIO()
         plt.tight_layout()
@@ -343,6 +352,13 @@ def _send_alerts_worker(ep_snapshot):
             recipient=PHYSICIAN_EMAIL,
             status="DISPATCHED"
         )
+        state.pending_alerts.append({
+            "timestamp": timestamp_str,
+            "diagnosis": clean_diag,
+            "channels": ", ".join(channels) if channels else "Console Log",
+            "recipient": PHYSICIAN_EMAIL,
+            "status": "DISPATCHED"
+        })
     except Exception as e:
         print(f"[Record Warning] Failed to log alert in DB: {e}")
 
@@ -366,6 +382,9 @@ class PipelineState:
         self._last_calc_samples = 0
         self.active_patient_id = 'p_frequent_pvc'
         self.active_patient_record_id = 'PT-LIVE'
+        self.last_episode_strip = None
+        self.pending_episodes = deque(maxlen=20)
+        self.pending_alerts = deque(maxlen=20)
         self.last_win = dict(
             primary_type='warming_up', types=[], hr_bpm=0.0,
             burden_V=0.0, burden_S=0.0, burden_Q=0.0, nrmssd=0.0,
@@ -484,6 +503,229 @@ async def get_patient_alerts(patient_id: Optional[str] = None, limit: int = 50):
     alerts = pdb.get_alerts(pid, limit=limit)
     return {"status": "ok", "patient_id": pid, "alerts": alerts}
 
+@app.get("/api/records/report/{patient_id}", response_class=HTMLResponse)
+async def generate_holter_report(patient_id: str):
+    p = pdb.get_patient(patient_id)
+    if not p:
+        return HTMLResponse("<h3 style='font-family:sans-serif; padding:20px;'>Patient not found</h3>", status_code=404)
+    
+    episodes = pdb.get_episodes(patient_id, limit=30)
+    
+    hrs = [ep['hr_bpm'] for ep in episodes if ep['hr_bpm'] and ep['hr_bpm'] > 0]
+    avg_hr = round(sum(hrs) / len(hrs), 1) if hrs else "--"
+    min_hr = round(min(hrs), 1) if hrs else "--"
+    max_hr = round(max(hrs), 1) if hrs else "--"
+    
+    bvs = [ep['burden_v'] for ep in episodes if ep['burden_v'] is not None]
+    avg_bv = round(sum(bvs) / len(bvs), 1) if bvs else 0.0
+    
+    bss = [ep['burden_s'] for ep in episodes if ep['burden_s'] is not None]
+    avg_bs = round(sum(bss) / len(bss), 1) if bss else 0.0
+    
+    primary_condition = episodes[0]['primary_diagnosis'] if episodes else "Normal Sinus Rhythm"
+    report_time = time.strftime("%B %d, %Y - %H:%M:%S")
+
+    strip_img_tag = ""
+    strip_sig = state.last_episode_strip
+    if strip_sig is None and 'p_frequent_pvc' in PATIENT_ARRAYS:
+        strip_sig = PATIENT_ARRAYS['p_frequent_pvc'][:int(6 * FS)]
+        
+    if strip_sig is not None and len(strip_sig) > 50:
+        png_bytes = render_episode_png(strip_sig, primary_condition, avg_hr if isinstance(avg_hr, (int, float)) else 75, dark_theme=False)
+        if png_bytes:
+            b64_str = base64.b64encode(png_bytes).decode('ascii')
+            strip_img_tag = f'<div style="margin: 12px 0; text-align: center;"><img src="data:image/png;base64,{b64_str}" style="width: 100%; max-height: 170px; object-fit: contain; border-radius: 6px; border: 1px solid #cbd5e1;" /></div>'
+
+    ep_rows = ""
+    if episodes:
+        for ep in episodes[:10]:
+            ep_rows += f"""
+            <tr>
+              <td>{ep['timestamp']}</td>
+              <td><strong>{ep['primary_diagnosis']}</strong></td>
+              <td>{ep['triggered_rules']}</td>
+              <td>{ep['hr_bpm']:.1f} BPM</td>
+              <td>{ep['burden_v']}%</td>
+              <td>{ep['burden_s']}%</td>
+              <td>{ep['rmssd_ms']:.1f} ms</td>
+            </tr>
+            """
+    else:
+        ep_rows = '<tr><td colspan="7" style="text-align:center; color:#64748b; padding:12px;">No abnormal arrhythmic events logged during telemetry period.</td></tr>'
+
+    html = f"""<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Clinical ECG Holter Report - {p['name']} ({p['patient_id']})</title>
+  <style>
+    body {{
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      color: #0f172a;
+      background: #f8fafc;
+      margin: 0;
+      padding: 24px;
+    }}
+    .report-card {{
+      max-width: 820px;
+      margin: 0 auto;
+      background: #ffffff;
+      padding: 30px 34px;
+      border: 1px solid #e2e8f0;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+      border-radius: 8px;
+    }}
+    .rep-header {{
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      border-bottom: 2px solid #0284c7;
+      padding-bottom: 14px;
+      margin-bottom: 18px;
+    }}
+    .rep-header h1 {{ margin: 0; font-size: 20px; color: #0f172a; font-weight: 800; }}
+    .rep-header p {{ margin: 3px 0 0 0; font-size: 11.5px; color: #64748b; }}
+    .badge-report {{
+      background: #e0f2fe;
+      color: #0369a1;
+      padding: 3px 9px;
+      border-radius: 5px;
+      font-size: 11px;
+      font-weight: 700;
+    }}
+    .grid-2 {{ display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 16px; }}
+    .info-box {{
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+      padding: 10px 12px;
+      font-size: 11.5px;
+    }}
+    .info-box strong {{ color: #334155; }}
+    .stat-row {{ display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dashed #e2e8f0; }}
+    .stat-row:last-child {{ border-bottom: none; }}
+    .rep-title {{
+      font-size: 12px;
+      font-weight: 700;
+      color: #0284c7;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 6px;
+    }}
+    table {{ width: 100%; border-collapse: collapse; font-size: 11px; margin-top: 6px; }}
+    th {{ background: #f1f5f9; text-align: left; padding: 6px 8px; color: #475569; font-weight: 600; border-bottom: 1px solid #cbd5e1; }}
+    td {{ padding: 6px 8px; border-bottom: 1px solid #f1f5f9; color: #1e293b; }}
+    .rep-footer {{
+      margin-top: 24px;
+      padding-top: 14px;
+      border-top: 1px solid #cbd5e1;
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      color: #64748b;
+    }}
+    .action-bar {{
+      max-width: 820px;
+      margin: 0 auto 14px auto;
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+    }}
+    .btn-print {{
+      background: #0284c7;
+      color: #ffffff;
+      border: none;
+      padding: 7px 16px;
+      border-radius: 6px;
+      font-weight: 600;
+      font-size: 12.5px;
+      cursor: pointer;
+    }}
+    .btn-print:hover {{ background: #0369a1; }}
+    @media print {{
+      body {{ background: #ffffff; padding: 0; }}
+      .report-card {{ border: none; box-shadow: none; padding: 0; }}
+      .no-print {{ display: none !important; }}
+    }}
+  </style>
+</head>
+<body>
+
+<div class="action-bar no-print">
+  <button class="btn-print" onclick="window.print()">🖨️ Print / Save as PDF</button>
+</div>
+
+<div class="report-card">
+  <div class="rep-header">
+    <div>
+      <h1>Clinical Telemetry Holter Report</h1>
+      <p>4-Class Real-Time Arrhythmia Monitoring Pipeline • Raspberry Pi 5 Telemetry Engine</p>
+      <p style="margin-top:3px;">Report Generated: <strong>{report_time}</strong></p>
+    </div>
+    <div style="text-align: right;">
+      <span class="badge-report">CONFIDENTIAL MEDICAL REPORT</span>
+      <p style="margin-top: 5px; font-size:10.5px; color:#64748b;">Telemetry System ID: AGY-ECG-V3</p>
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <div class="info-box">
+      <div class="rep-title">Patient Demographics</div>
+      <div class="stat-row"><span>Patient ID / MRN:</span> <strong>{p['patient_id']}</strong></div>
+      <div class="stat-row"><span>Full Name:</span> <strong>{p['name']}</strong></div>
+      <div class="stat-row"><span>Age / Gender:</span> <strong>{p['age'] or '--'} y / {p['gender'] or 'Unspecified'}</strong></div>
+      <div class="stat-row"><span>Clinical Notes:</span> <span>{p['medical_notes'] or 'None recorded'}</span></div>
+      <div class="stat-row"><span>Registered Date:</span> <span>{p['created_at']}</span></div>
+    </div>
+
+    <div class="info-box">
+      <div class="rep-title">Monitoring Session Overview</div>
+      <div class="stat-row"><span>Primary Diagnosis:</span> <strong style="color:#b91c1c;">{primary_condition}</strong></div>
+      <div class="stat-row"><span>Average Ventricular Rate:</span> <strong>{avg_hr} BPM</strong></div>
+      <div class="stat-row"><span>Heart Rate Range (Min / Max):</span> <strong>{min_hr} / {max_hr} BPM</strong></div>
+      <div class="stat-row"><span>Total Arrhythmia Episodes:</span> <strong>{len(episodes)} events</strong></div>
+      <div class="stat-row"><span>Mean Ectopic Burden:</span> <strong>V: {avg_bv}% | S: {avg_bs}%</strong></div>
+    </div>
+  </div>
+
+  <div class="rep-title" style="margin-top: 12px;">Clinical Rhythm Strip (Sample Triggered Episode)</div>
+  {strip_img_tag}
+
+  <div class="rep-title" style="margin-top: 16px;">Recent Arrhythmia Episode Log</div>
+  <table>
+    <thead>
+      <tr>
+        <th>Timestamp</th>
+        <th>Diagnosis</th>
+        <th>Triggered Rules</th>
+        <th>Heart Rate</th>
+        <th>PVC %</th>
+        <th>PAC %</th>
+        <th>HRV RMSSD</th>
+      </tr>
+    </thead>
+    <tbody>
+      {ep_rows}
+    </tbody>
+  </table>
+
+  <div class="rep-footer">
+    <div>
+      <p style="margin:0;">Interpreting Physician: ___________________________________</p>
+      <p style="margin:4px 0 0 0;">Signature / NPI: ___________________________________</p>
+    </div>
+    <div style="text-align: right;">
+      <p style="margin:0;">Clinical Telemedicine Triage Unit</p>
+      <p style="margin:4px 0 0 0;">Automated LightGBM Beat Classification + 30s Rule Gate</p>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
+"""
+    return HTMLResponse(html)
+
 @app.websocket("/ws")
 async def ws_endpoint(ws: WebSocket):
     await ws.accept()
@@ -586,7 +828,7 @@ async def inference_broadcaster():
 
                     # Persist irregular arrhythmia episode to SQLite database
                     try:
-                        pdb.log_episode(
+                        ep_id = pdb.log_episode(
                             patient_id=pid,
                             primary_diagnosis=clean_diag_str,
                             triggered_rules=list(w['types']),
@@ -599,12 +841,27 @@ async def inference_broadcaster():
                             telemetry_source=state.mode,
                             duration_s=30.0
                         )
+                        state.pending_episodes.append({
+                            "id": ep_id,
+                            "patient_id": pid,
+                            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+                            "primary_diagnosis": clean_diag_str,
+                            "triggered_rules": ", ".join(list(w['types'])),
+                            "hr_bpm": hr_bpm,
+                            "burden_v": burden_v,
+                            "burden_s": burden_s,
+                            "burden_q": burden_q,
+                            "rmssd_ms": rmssd_ms,
+                            "stress_state": stress_state,
+                            "telemetry_source": state.mode
+                        })
                     except Exception as e:
                         print(f"[Record Warning] Failed to log episode: {e}")
 
                     # Slice the last 6 seconds (1500 samples) from the detector buffer for the episode strip
                     buf_arr = np.array(state.det.buf, dtype=np.float32)
                     sig_slice = buf_arr[-int(6 * FS):].copy() if len(buf_arr) > 0 else np.array([])
+                    state.last_episode_strip = sig_slice
                     snapshot = dict(
                         patient_id=pid,
                         primary=primary,
@@ -689,6 +946,9 @@ async def inference_broadcaster():
             "queue_len": len(state.udp_queue) if is_live_mode else len(state.det.buf)
         }
 
+        new_episodes = [state.pending_episodes.popleft() for _ in range(len(state.pending_episodes))]
+        new_alerts = [state.pending_alerts.popleft() for _ in range(len(state.pending_alerts))]
+
         payload = json.dumps(dict(
             mode=state.mode,
             telemetry=telemetry_info,
@@ -696,6 +956,8 @@ async def inference_broadcaster():
             buf_fill_s=round(len(state.det.buf) / FS, 1),
             signal=[round(float(x), 4) for x in chunk[::2]], 
             new_beats=new_beats,
+            new_episodes=new_episodes,
+            new_alerts=new_alerts,
             window=state.last_win
         ))
 
