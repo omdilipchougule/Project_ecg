@@ -15,7 +15,7 @@
       --border-subtle: rgba(255, 255, 255, 0.07);
       --border-highlight: rgba(255, 255, 255, 0.14);
       
-      --text-primary: #f8fafc;
+      --text-primary: #ffffff;
       --text-secondary: #94a3b8;
       --text-muted: #64748b;
       
@@ -60,45 +60,15 @@
     }
 
     .brand { display: flex; align-items: center; gap: 14px; }
-    
-    .status-orb {
-      width: 10px; height: 10px;
-      border-radius: 50%;
-      background: var(--emerald);
-      box-shadow: 0 0 12px var(--emerald);
-      animation: pulse-orb 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-    }
-    @keyframes pulse-orb { 
-      0%, 100% { opacity: 1; transform: scale(1); } 
-      50% { opacity: 0.45; transform: scale(0.92); } 
-    }
 
     .brand-title h1 {
       font-size: 19px;
       font-weight: 700;
       letter-spacing: -0.025em;
-      color: var(--text-primary);
+      color: #ffffff;
       display: flex;
       align-items: center;
       gap: 12px;
-    }
-
-    .triage-pill {
-      font-size: 11px;
-      font-weight: 600;
-      padding: 3px 10px;
-      border-radius: 999px;
-      background: rgba(16, 185, 129, 0.12);
-      border: 1px solid rgba(16, 185, 129, 0.3);
-      color: #34d399;
-      letter-spacing: 0.03em;
-      transition: all 0.3s ease;
-    }
-    .triage-pill.dispatched {
-      background: rgba(244, 63, 94, 0.2);
-      border-color: rgba(244, 63, 94, 0.5);
-      color: #fda4af;
-      box-shadow: 0 0 14px rgba(244, 63, 94, 0.35);
     }
 
     /* --- SEGMENTED CONTROLS WITH INDIVIDUAL TAB THEMES --- */
@@ -124,7 +94,7 @@
       transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
     }
     .controls button:hover { 
-      color: var(--text-primary); 
+      color: #ffffff; 
       background: rgba(255, 255, 255, 0.05); 
     }
 
@@ -189,7 +159,7 @@
     }
     .stage-card .st-val {
       font-size: 12.5px;
-      color: #22d3ee;
+      color: #ffffff;
       font-weight: 600;
       display: flex;
       align-items: center;
@@ -259,7 +229,7 @@
       display: block;
     }
 
-    /* --- CLINICAL VITAL CARDS (5-COLUMN) --- */
+    /* --- CLINICAL VITAL CARDS (5-COLUMN) WITH PURE WHITE NUMBERS --- */
     .vitals-grid {
       display: grid;
       grid-template-columns: repeat(5, 1fr);
@@ -289,6 +259,7 @@
       font-weight: 700;
       margin-top: 6px;
       letter-spacing: -0.03em;
+      color: #ffffff !important;
     }
     .vital-card .v-sub {
       font-size: 11px;
@@ -410,12 +381,8 @@
 
 <header class="header">
   <div class="brand">
-    <div class="status-orb" id="ws-orb"></div>
     <div class="brand-title">
-      <h1>
-        Clinical ECG Arrhythmia Telemetry
-        <span class="triage-pill" id="triage-status">TRIAGE ARMED</span>
-      </h1>
+      <h1>Clinical ECG Arrhythmia Telemetry</h1>
     </div>
   </div>
   <div class="controls">
@@ -462,25 +429,25 @@
     <div class="vitals-grid">
       <div class="vital-card">
         <div class="v-label"><span>Heart Rate</span><span>BPM</span></div>
-        <div class="v-value mono" id="m-hr" style="color: var(--emerald);">--</div>
+        <div class="v-value mono" id="m-hr">--</div>
         <div class="v-sub" id="m-hr-sub">Sinus Range</div>
       </div>
 
       <div class="vital-card">
         <div class="v-label"><span>PVC Burden</span><span>V</span></div>
-        <div class="v-value mono" id="m-bv" style="color: var(--rose);">0%</div>
+        <div class="v-value mono" id="m-bv">0%</div>
         <div class="v-sub">Ventricular</div>
       </div>
 
       <div class="vital-card">
         <div class="v-label"><span>PAC Burden</span><span>S</span></div>
-        <div class="v-value mono" id="m-bs" style="color: var(--violet);">0%</div>
+        <div class="v-value mono" id="m-bs">0%</div>
         <div class="v-sub">Atrial</div>
       </div>
 
       <div class="vital-card">
         <div class="v-label"><span>HRV (RMSSD)</span><span>ANS</span></div>
-        <div class="v-value mono" id="m-hrv" style="color: var(--cyan);">-- ms</div>
+        <div class="v-value mono" id="m-hrv">-- ms</div>
         <div class="v-sub" id="m-stress">Calibrating</div>
       </div>
 
@@ -493,7 +460,7 @@
 
     <div class="gate-footer">
       <div class="gate-header">
-        <span>Q-Noise Burden (<span id="q-val" class="mono" style="color:var(--amber);">0%</span>)</span>
+        <span>Q-Noise Burden (<span id="q-val" class="mono" style="color:#ffffff;">0%</span>)</span>
         <span style="color:var(--rose);">35% Suppression Threshold</span>
       </div>
       <div class="gauge-track">
@@ -683,13 +650,11 @@ requestAnimationFrame(renderLoop);
 const ws = new WebSocket(`ws://${location.host}/ws`);
 
 ws.onopen = () => { 
-  document.getElementById('ws-orb').style.background = 'var(--emerald)';
   document.getElementById('diag-title').textContent = 'PRIMARY DIAGNOSIS: CONNECTED';
   document.getElementById('diag-banner').className = 'diag-banner state-normal';
 };
 
 ws.onclose = () => { 
-  document.getElementById('ws-orb').style.background = 'var(--rose)';
   document.getElementById('st-mode').textContent = 'DISCONNECTED';
   document.getElementById('diag-title').textContent = 'PRIMARY DIAGNOSIS: OFFLINE';
   document.getElementById('diag-banner').className = 'diag-banner state-critical';
@@ -727,15 +692,7 @@ ws.onmessage = (ev) => {
   else if (w.primary_type === 'insufficient_data' || w.primary_type === 'warming_up') banner.classList.add('state-warmup');
   else banner.classList.add('state-critical');
 
-  const triagePill = document.getElementById('triage-status');
-  if (w.alert_dispatched) {
-    triagePill.textContent = `TRIAGE SENT • ${cleanPrimary}`;
-    triagePill.classList.add('dispatched');
-  } else {
-    triagePill.textContent = `TRIAGE ARMED`;
-    triagePill.classList.remove('dispatched');
-  }
-
+  // Update clinical vitals in crisp solid white
   document.getElementById('m-hr').textContent = w.hr_bpm > 0 ? `${w.hr_bpm}` : '--';
   document.getElementById('m-hr-sub').textContent = w.hr_bpm > 100 ? 'Tachycardic' : (w.hr_bpm > 0 && w.hr_bpm < 60 ? 'Bradycardic' : 'Sinus Range');
   document.getElementById('m-bv').textContent = `${w.burden_V}%`;
@@ -747,7 +704,6 @@ ws.onmessage = (ev) => {
   if (w.rmssd_ms > 0) {
     hrvEl.textContent = `${w.rmssd_ms.toFixed(1)} ms`;
     stressEl.textContent = w.stress_state || 'Normal';
-    hrvEl.style.color = w.rmssd_ms < 22 ? 'var(--amber)' : 'var(--cyan)';
   } else {
     hrvEl.textContent = '-- ms';
     stressEl.textContent = 'Calibrating';
@@ -773,10 +729,10 @@ ws.onmessage = (ev) => {
       tr.innerHTML = `
         <td style="color:var(--text-secondary);">${b.t}s</td>
         <td><span class="badge b-${b.label}">${b.label}</span></td>
-        <td style="color:${b.pN > 0.5 ? '#34d399' : 'inherit'}; font-weight:${b.pN > 0.5 ? '700' : '400'}">${b.pN}</td>
-        <td style="color:${b.pS > 0.5 ? '#c084fc' : 'inherit'}; font-weight:${b.pS > 0.5 ? '700' : '400'}">${b.pS}</td>
-        <td style="color:${b.pV > 0.5 ? '#fb7185' : 'inherit'}; font-weight:${b.pV > 0.5 ? '700' : '400'}">${b.pV}</td>
-        <td style="color:${b.pQ > 0.5 ? '#fbbf24' : 'inherit'}; font-weight:${b.pQ > 0.5 ? '700' : '400'}">${b.pQ}</td>
+        <td style="color:${b.pN > 0.5 ? '#34d399' : '#ffffff'}; font-weight:${b.pN > 0.5 ? '700' : '400'}">${b.pN}</td>
+        <td style="color:${b.pS > 0.5 ? '#c084fc' : '#ffffff'}; font-weight:${b.pS > 0.5 ? '700' : '400'}">${b.pS}</td>
+        <td style="color:${b.pV > 0.5 ? '#fb7185' : '#ffffff'}; font-weight:${b.pV > 0.5 ? '700' : '400'}">${b.pV}</td>
+        <td style="color:${b.pQ > 0.5 ? '#fbbf24' : '#ffffff'}; font-weight:${b.pQ > 0.5 ? '700' : '400'}">${b.pQ}</td>
       `;
       tbody.insertBefore(tr, tbody.firstChild);
       while (tbody.children.length > 13) tbody.removeChild(tbody.lastChild);

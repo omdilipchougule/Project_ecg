@@ -489,11 +489,12 @@ async def startup_tasks():
     asyncio.create_task(udp_listener())
     asyncio.create_task(inference_broadcaster())
 
+@app.get("/dashboard_premium.html", response_class=HTMLResponse)
 @app.get("/dashboard_realtime.html", response_class=HTMLResponse)
 @app.get("/dashboard.html", response_class=HTMLResponse)
 @app.get("/", response_class=HTMLResponse)
 async def index():
-    for name in ["dashboard_realtime.html", "dashboard_anti_slop.html", "dashboard.html"]:
+    for name in ["dashboard_premium.html", "dashboard_realtime.html", "dashboard_anti_slop.html", "dashboard.html"]:
         p = os.path.join(os.path.dirname(__file__), name)
         if os.path.exists(p):
             with open(p, encoding="utf-8") as f:
