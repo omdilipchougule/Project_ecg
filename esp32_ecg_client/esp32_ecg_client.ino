@@ -1,102 +1,116 @@
-// ESP32 ECG WebSocket Client
+// ==============================================================================
+// ESP32 High-Performance ECG WebSocket Client for Clinical Telemetry
+// ==============================================================================
 
 #include <WiFi.h>
+#include <WiFiMulti.h>
 #include <WebSocketsClient.h>
 
-// WiFi credentials
-const char* ssid = "om";
-const char* password = "7020344293";
+// --- 1. MULTIPLE SAVED WI-FI NETWORKS ---
+// Connects automatically to whichever network has the strongest signal!
+struct WiFiCredential {
+  const char* ssid;
+  const char* pass;
+};
 
-// WebSocket server details (Raspberry Pi IP)
-const char* websocket_server_host = "192.168.39.48";
-const uint16_t websocket_server_port = 8000;
+const WiFiCredential KNOWN_NETWORKS[] = {
+  {"JioFiber-DILIP", "air90000"},
+  {"om", "12345678"},
+  {"om", "7020344293"},
+  {"MobileHotspot", "12345678"}
+};
+constexpr size_t NUM_NETWORKS = sizeof(KNOWN_NETWORKS) / sizeof(KNOWN_NETWORKS[0]);
 
-// ECG configuration
-const int ecgPin = 4; // ADC1 channel (GPIO 4)
-const int sampleRate = 250; // Hz
-const int bufferSize = 250; // 1 second buffer at 250Hz
-constexpr uint32_t SAMPLE_INTERVAL_US = 4000; // 1,000,000 us / 250 Hz = 4000 us
+// --- 2. VERIFIED RASPBERRY PI WEBSOCKET SERVER ---
+const char* websocket_server_host = "192.168.29.237"; // Raspberry Pi 5 IP
+const uint16_t websocket_server_port = 8080;          // Server Port
 
-// Global variables
+// --- 3. HARDWARE PINOUT & SAMPLING ---
+const int ecgPin = 4; // AD8232 OUTPUT -> GPIO 4 (ADC1_CH3)
+const int loPlusPin = 5; // AD8232 LO+ -> GPIO 5
+const int loMinusPin = 6; // AD8232 LO- -> GPIO 6
+
+constexpr uint32_t SAMPLE_INTERVAL_US = 4000; // 250 Hz (1,000,000 us / 250)
+constexpr int BATCH_SIZE = 50;                // Send packet every 200ms for smooth live wave
+
+// Set to 1 to enable USB Serial Plotter output (115200 baud)
+#define ENABLE_SERIAL_PLOTTER 1
+
+// --- GLOBALS ---
+WiFiMulti wifiMulti;
 WebSocketsClient webSocket;
-int ecgBuffer[bufferSize];
+int ecgBuffer[BATCH_SIZE];
 int bufferIndex = 0;
 uint32_t lastSampleMicros = 0;
+float dcBaseline = 2048.0f;
 
 void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
   switch(type) {
     case WStype_DISCONNECTED:
-      Serial.println("[WS] Disconnected!");
+      Serial.println("[WS] Disconnected from server!");
       break;
     case WStype_CONNECTED:
-      Serial.println("[WS] Connected to Raspberry Pi server!");
+      Serial.println("[WS] >>> CONNECTED TO RASPBERRY PI TELEMETRY SERVER! <<<");
       break;
     case WStype_TEXT:
-      // Feedback from server if any
+      // Feedback or commands from server
       break;
   }
 }
 
 void setup() {
   Serial.begin(115200);
-  delay(500);
+  delay(1000);
+  Serial.println("\n=== AD8232 High-Performance WebSocket Telemetry ===");
 
-  // Configure ADC resolution & pin attenuation (0V - 3.1V range)
+  // Configure Hardware Pins
+  pinMode(ecgPin, INPUT);
+  pinMode(loPlusPin, INPUT);
+  pinMode(loMinusPin, INPUT);
   analogReadResolution(12);
   analogSetPinAttenuation(ecgPin, ADC_11db);
-  pinMode(ecgPin, INPUT);
 
-  // Disable Wi-Fi power-save to prevent analog rail noise
+  // Disable Wi-Fi power-save to prevent RF noise on the analog 3.3V rail
   WiFi.mode(WIFI_STA);
   WiFi.setSleep(false);
-  WiFi.begin(ssid, password);
 
-  Serial.print("Connecting to Wi-Fi");
-  while (WiFi.status() != WL_CONNECTED) {
+  for (size_t i = 0; i < NUM_NETWORKS; i++) {
+    wifiMulti.addAP(KNOWN_NETWORKS[i].ssid, KNOWN_NETWORKS[i].pass);
+  }
+
+  Serial.println("[Wi-Fi] Scanning and connecting to saved networks...");
+  uint32_t t0 = millis();
+  while (wifiMulti.run() != WL_CONNECTED && millis() - t0 < 15000) {
     delay(250);
     Serial.print(".");
   }
+  Serial.println();
 
-  Serial.println("");
-  Serial.println("Wi-Fi connected!");
-  Serial.print("ESP32 IP: ");
-  Serial.println(WiFi.localIP());
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.printf("[Wi-Fi] Connected to '%s'! ESP32 IP: %s\n", 
+                  WiFi.SSID().c_str(), WiFi.localIP().toString().c_str());
+  } else {
+    Serial.println("[Wi-Fi] Timeout — running in local Serial Plotter mode.");
+  }
 
-  // Connect to Raspberry Pi WebSocket server
+  // Connect to Raspberry Pi WebSocket Server
+  Serial.printf("[WS] Connecting to ws://%s:%d/ws ...\n", websocket_server_host, websocket_server_port);
   webSocket.begin(websocket_server_host, websocket_server_port, "/ws");
   webSocket.onEvent(webSocketEvent);
   webSocket.setReconnectInterval(2000);
 
   lastSampleMicros = micros();
+  Serial.println("[Init] Setup complete! Starting 250 Hz sampling...\n");
 }
 
-void loop() {
-  webSocket.loop();
-
-  uint32_t now = micros();
-  // Non-blocking 250 Hz sample clock (every 4000 microseconds)
-  if (now - lastSampleMicros >= SAMPLE_INTERVAL_US) {
-    lastSampleMicros += SAMPLE_INTERVAL_US;
-
-    // Read raw 12-bit ADC value (0 - 4095)
-    ecgBuffer[bufferIndex++] = analogRead(ecgPin);
-
-    // When 250 samples (1 full second) are collected, send to server
-    if (bufferIndex >= bufferSize) {
-      bufferIndex = 0;
-      sendECGData();
-    }
-  }
-}
-
-void sendECGData() {
-  // Construct JSON string directly: {"signal":[...]}
+void sendECGBatch() {
+  // Construct JSON batch: {"signal":[...]}
   String jsonStr;
-  jsonStr.reserve(1500);
+  jsonStr.reserve(400);
   jsonStr = "{\"signal\":[";
-  for (int i = 0; i < bufferSize; i++) {
+  for (int i = 0; i < BATCH_SIZE; i++) {
     jsonStr += ecgBuffer[i];
-    if (i < bufferSize - 1) {
+    if (i < BATCH_SIZE - 1) {
       jsonStr += ",";
     }
   }
@@ -104,6 +118,38 @@ void sendECGData() {
 
   if (webSocket.isConnected()) {
     webSocket.sendTXT(jsonStr);
-    Serial.println("[WS] 250-sample ECG batch transmitted");
+  }
+}
+
+void loop() {
+  webSocket.loop();
+
+  // Maintain Wi-Fi connection
+  if (WiFi.status() != WL_CONNECTED) {
+    wifiMulti.run();
+  }
+
+  uint32_t now = micros();
+  // Exact 250 Hz sample clock (every 4000 microseconds)
+  if (now - lastSampleMicros >= SAMPLE_INTERVAL_US) {
+    lastSampleMicros += SAMPLE_INTERVAL_US;
+
+    int rawAdc = analogRead(ecgPin);
+
+#if ENABLE_SERIAL_PLOTTER
+    // Subtract DC baseline for local Serial Plotter display (-1.5 to +1.5 mV)
+    dcBaseline = (0.995f * dcBaseline) + (0.005f * (float)rawAdc);
+    float normalizedMv = ((float)rawAdc - dcBaseline) / 450.0f;
+    Serial.println(normalizedMv, 4);
+#endif
+
+    // Store raw 12-bit ADC value into telemetry batch
+    ecgBuffer[bufferIndex++] = rawAdc;
+
+    // Send batch of 50 samples (every 200ms) to server
+    if (bufferIndex >= BATCH_SIZE) {
+      bufferIndex = 0;
+      sendECGBatch();
+    }
   }
 }

@@ -1,10 +1,23 @@
 #include <WiFi.h>
+#include <WiFiMulti.h>
 #include <WiFiUdp.h>
 
-// --- 1. NETWORK CONFIGURATION ---
-const char* WIFI_SSID = "om";
-const char* WIFI_PASS = "7020344293";
-const char* PI_IP     = "192.168.39.48"; // Raspberry Pi IP
+// --- 1. MULTIPLE SAVED WI-FI NETWORKS ---
+// Add as many networks as you like! The ESP32 will auto-connect to the best available network.
+struct WiFiCredential {
+  const char* ssid;
+  const char* pass;
+};
+
+const WiFiCredential KNOWN_NETWORKS[] = {
+  {"om", "12345678"},
+  {"om", "7020344293"},
+  {"MobileHotspot", "12345678"},
+  {"HomeWiFi", "password"}
+};
+constexpr size_t NUM_NETWORKS = sizeof(KNOWN_NETWORKS) / sizeof(KNOWN_NETWORKS[0]);
+
+const char* PI_IP     = "192.168.29.213"; // Raspberry Pi IP (auto-updated by auto_detect_pi.py)
 const uint16_t UDP_PORT = 5005;
 
 // --- 2. HARDWARE PINOUT (MATCHES PROTO-SHIELD SCHEMATIC) ---
@@ -16,6 +29,7 @@ constexpr int PIN_LO_MINUS = 6; // AD8232 LO-    -> GPIO 6
 constexpr uint32_t SAMPLE_INTERVAL_US = 4000; // 1,000,000 us / 250 Hz = 4000 us
 constexpr int BATCH_SIZE = 25;                // Send packet every 100ms (25 samples)
 
+WiFiMulti wifiMulti;
 WiFiUDP udp;
 uint32_t lastSampleMicros = 0;
 float dcBaseline = 2048.0f; // 12-bit ADC midpoint (0-4095)
@@ -36,19 +50,21 @@ void setup() {
   // Disable Wi-Fi power-save to prevent 100ms beacon current spikes on the 3.3V analog rail
   WiFi.mode(WIFI_STA);
   WiFi.setSleep(false);
-  WiFi.begin(WIFI_SSID, WIFI_PASS);
 
-  Serial.print("Connecting to Wi-Fi");
+  for (size_t i = 0; i < NUM_NETWORKS; i++) {
+    wifiMulti.addAP(KNOWN_NETWORKS[i].ssid, KNOWN_NETWORKS[i].pass);
+  }
+
+  Serial.println("Connecting to best available Wi-Fi...");
   uint32_t startAttempt = millis();
-  while (WiFi.status() != WL_CONNECTED && millis() - startAttempt < 10000) {
+  while (wifiMulti.run() != WL_CONNECTED && millis() - startAttempt < 15000) {
     delay(250);
     Serial.print(".");
   }
   Serial.println();
 
   if (WiFi.status() == WL_CONNECTED) {
-    Serial.print("Connected! ESP32-S3 IP: ");
-    Serial.println(WiFi.localIP());
+    Serial.printf("Connected to '%s'! ESP32 IP: %s\n", WiFi.SSID().c_str(), WiFi.localIP().toString().c_str());
   } else {
     Serial.println("Wi-Fi timeout — running in local Serial Plotter mode.");
   }

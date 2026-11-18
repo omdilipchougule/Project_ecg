@@ -365,16 +365,26 @@ async def udp_listener():
     sock.bind(('0.0.0.0', UDP_PORT))
     sock.setblocking(False)
     loop = asyncio.get_event_loop()
+    print(f"[UDP] Listening for ESP32 telemetry packets on port {UDP_PORT}...")
+    connected_esp = False
     while True:
         try:
-            data, _ = await loop.sock_recvfrom(sock, 4096)
+            data, addr = await loop.sock_recvfrom(sock, 4096)
+            if data.startswith(b"ECG_DISCOVER"):
+                sock.sendto(b"ECG_OFFER", addr)
+                print(f"[UDP Auto-Discovery] Handshake received from ESP32 at {addr}! Sent Pi offer.")
+                continue
             try:
                 vals = [float(x) for x in data.decode('utf-8').strip().split(',') if x]
-            except UnicodeDecodeError:
+            except (UnicodeDecodeError, ValueError):
                 vals = np.frombuffer(data, dtype=np.float32).tolist()
+            if not connected_esp:
+                print(f"[UDP] Connection established! Receiving live ECG stream from ESP32 at {addr}")
+                connected_esp = True
             state.udp_queue.extend(vals)
         except Exception:
             await asyncio.sleep(0.005)
+
 
 async def inference_broadcaster():
     non_critical_states = {'warming_up', 'insufficient_data', 'no_arrhythmia_detected', 'poor_quality'}
@@ -479,9 +489,11 @@ async def startup_tasks():
     asyncio.create_task(udp_listener())
     asyncio.create_task(inference_broadcaster())
 
+@app.get("/dashboard_realtime.html", response_class=HTMLResponse)
+@app.get("/dashboard.html", response_class=HTMLResponse)
 @app.get("/", response_class=HTMLResponse)
 async def index():
-    for name in ["dashboard.html", "dashboard_realtime.html"]:
+    for name in ["dashboard_realtime.html", "dashboard_anti_slop.html", "dashboard.html"]:
         p = os.path.join(os.path.dirname(__file__), name)
         if os.path.exists(p):
             with open(p, encoding="utf-8") as f:
