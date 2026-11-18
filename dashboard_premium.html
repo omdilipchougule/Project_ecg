@@ -495,6 +495,22 @@ const ctx = canvas.getContext('2d');
 const MAX_PTS = 750;
 let trace = new Array(MAX_PTS).fill(0);
 
+// Human-readable diagnosis and rule labels
+const DIAGNOSIS_LABELS = {
+  'ventricular_tachycardia':      'Ventricular Tachycardia',
+  'frequent_PVC':                 'Frequent PVCs (Ventricular Ectopy)',
+  'isolated_PVC':                 'Isolated PVC',
+  'supraventricular_tachycardia': 'Supraventricular Tachycardia (SVT)',
+  'frequent_PAC':                 'Frequent PACs (Atrial Ectopy)',
+  'tachycardia':                  'Sinus Tachycardia',
+  'bradycardia':                  'Sinus Bradycardia',
+  'irregular_rhythm_suspected':   'Irregular Rhythm — Possible A-Fib',
+  'no_arrhythmia_detected':       'Normal Sinus Rhythm',
+  'poor_quality':                 'Poor Signal Quality',
+  'insufficient_data':            'Insufficient Data',
+  'warming_up':                   'Calibrating…',
+};
+
 function resizeCanvas() {
   const rect = canvas.getBoundingClientRect();
   const dpr = window.devicePixelRatio || 1;
@@ -611,12 +627,15 @@ function renderLoop() {
   drawGrid(w, h);
 
   const mid = h / 2;
-  const scaleY = h * 0.24;
+  const scaleY = h * 0.42;
+
+  // DC-remove: subtract rolling mean so ECG oscillates around centre
+  const mean = trace.reduce((s, v) => s + v, 0) / trace.length;
 
   ctx.beginPath();
   for (let i = 0; i < trace.length; i++) {
     const x = (i / (MAX_PTS - 1)) * w;
-    const y = mid - (trace[i] * scaleY);
+    const y = mid - ((trace[i] - mean) * scaleY);
     if (i === 0) ctx.moveTo(x, y);
     else ctx.lineTo(x, y);
   }
@@ -633,7 +652,7 @@ function renderLoop() {
 
   // Leading pulse dot
   const lastX = w - 2;
-  const lastY = mid - (trace[trace.length - 1] * scaleY);
+  const lastY = mid - ((trace[trace.length - 1] - mean) * scaleY);
   ctx.beginPath();
   ctx.arc(lastX, lastY, 3.5, 0, Math.PI * 2);
   ctx.fillStyle = '#e0f2fe';
@@ -683,8 +702,8 @@ ws.onmessage = (ev) => {
   const banner = document.getElementById('diag-banner');
   const titleEl = document.getElementById('diag-title');
 
-  const cleanPrimary = (w.primary_type || 'warming_up').replace(/_/g, ' ').toUpperCase();
-  titleEl.textContent = `PRIMARY DIAGNOSIS: ${cleanPrimary}`;
+  const friendlyName = DIAGNOSIS_LABELS[w.primary_type] || w.primary_type.replace(/_/g, ' ');
+  titleEl.textContent = `PRIMARY DIAGNOSIS: ${friendlyName.toUpperCase()}`;
 
   banner.className = 'diag-banner ';
   if (w.primary_type === 'no_arrhythmia_detected') banner.classList.add('state-normal');
@@ -711,7 +730,9 @@ ws.onmessage = (ev) => {
 
   const typesContainer = document.getElementById('m-types');
   if (w.types && w.types.length) {
-    typesContainer.innerHTML = w.types.map(t => `<span class="rule-chip mono">${t}</span>`).join('');
+    typesContainer.innerHTML = w.types.map(t =>
+      `<span class="rule-chip mono">${DIAGNOSIS_LABELS[t] || t.replace(/_/g, ' ')}</span>`
+    ).join('');
   } else {
     typesContainer.innerHTML = `<span class="rule-chip mono">none</span>`;
   }

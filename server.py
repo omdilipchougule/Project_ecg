@@ -91,6 +91,22 @@ CLINICAL_DESCRIPTIONS = {
     )
 }
 
+# Human-readable display names for arrhythmia types (used in alerts/reports)
+DIAGNOSIS_LABELS = {
+    "ventricular_tachycardia":      "Ventricular Tachycardia",
+    "frequent_PVC":                 "Frequent PVCs (Ventricular Ectopy)",
+    "isolated_PVC":                 "Isolated PVC",
+    "supraventricular_tachycardia": "Supraventricular Tachycardia (SVT)",
+    "frequent_PAC":                 "Frequent PACs (Atrial Ectopy)",
+    "tachycardia":                  "Sinus Tachycardia",
+    "bradycardia":                  "Sinus Bradycardia",
+    "irregular_rhythm_suspected":   "Irregular Rhythm — Possible A-Fib",
+    "no_arrhythmia_detected":       "Normal Sinus Rhythm",
+    "poor_quality":                 "Poor Signal Quality",
+    "insufficient_data":            "Insufficient Data",
+    "warming_up":                   "Calibrating",
+}
+
 def derive_hrv_metrics(hr_bpm, nrmssd, nn_times_deque):
     rmssd_ms = 0.0
     if hr_bpm > 0.0 and nrmssd > 0.0:
@@ -198,7 +214,8 @@ def _send_alerts_worker(ep_snapshot):
     sig_slice    = ep_snapshot["sig_slice"]
 
     timestamp_str = time.strftime("%Y-%m-%d %H:%M:%S")
-    clean_diag = diagnosis.replace("_", " ").upper()
+    clean_diag = DIAGNOSIS_LABELS.get(diagnosis, diagnosis.replace("_", " ").title())
+    rules_readable = [DIAGNOSIS_LABELS.get(r, r.replace("_", " ").title()) for r in all_rules]
     rationale = CLINICAL_DESCRIPTIONS.get(
         diagnosis,
         "Abnormal rhythm pattern crossed clinical rule thresholds across the 30-second evaluation window."
@@ -223,14 +240,14 @@ def _send_alerts_worker(ep_snapshot):
     if DISCORD_WEBHOOK_URL and "YOUR_DISCORD" not in DISCORD_WEBHOOK_URL:
         try:
             embed = {
-                "title": f"🚨 CLINICAL TRIAGE ALERT: {clean_diag}",
+                "title": f"🚨 CLINICAL TRIAGE ALERT — {clean_diag}",
                 "description": f"**Clinical Rationale:** {rationale}",
                 "color": 15548997,
                 "fields": [
                     {"name": "Ventricular Rate", "value": f"**{hr_bpm} BPM**", "inline": True},
                     {"name": "Ectopic Burden (30s)", "value": f"PVC (V): **{burden_v}%** | PAC (S): **{burden_s}%**", "inline": True},
                     {"name": "Autonomic HRV", "value": f"**{rmssd_ms} ms** ({stress_state})\nnRMSSD: `{nrmssd}`", "inline": True},
-                    {"name": "Triggered Window Rules", "value": ", ".join(f"`{r}`" for r in all_rules) if all_rules else f"`{diagnosis}`", "inline": True},
+                    {"name": "Triggered Rules", "value": ", ".join(f"`{r}`" for r in rules_readable) if rules_readable else f"`{clean_diag}`", "inline": True},
                     {"name": "Signal Quality (Q-Gate)", "value": f"Noise: {burden_q}% (`{mode}`)", "inline": True},
                     {"name": "Timestamp", "value": timestamp_str, "inline": True},
                     {"name": "Flagged Episode Beat Sequence (Last 8 Beats)", "value": f"```\n{beat_log_str}\n```", "inline": False}
@@ -249,17 +266,17 @@ def _send_alerts_worker(ep_snapshot):
     if SMTP_APP_PASSWORD and "YOUR_16_CHAR" not in SMTP_APP_PASSWORD:
         try:
             msg = EmailMessage()
-            msg["Subject"] = f"[ECG TRIAGE ALERT] {clean_diag} ({hr_bpm} BPM)"
+            msg["Subject"] = f"[ECG TRIAGE ALERT] {clean_diag} — {hr_bpm} BPM"
             msg["From"] = SMTP_SENDER_EMAIL
             msg["To"] = PHYSICIAN_EMAIL
             msg.set_content(
                 f"CLINICAL TELEMEDICINE TRIAGE REPORT\n"
                 f"============================================================\n"
                 f"Primary Diagnosis  : {clean_diag}\n"
-                f"Triggered Rules    : {', '.join(all_rules) if all_rules else diagnosis}\n"
+                f"Triggered Rules    : {', '.join(rules_readable) if rules_readable else clean_diag}\n"
                 f"Timestamp          : {timestamp_str}\n"
                 f"Telemetry Source   : {mode}\n\n"
-                f"CLINICAL RATIONALE :\n"
+                f"CLINICAL RATIONALE:\n"
                 f"{rationale}\n\n"
                 f"30-SECOND WINDOW PHYSIOLOGICAL METRICS:\n"
                 f"  • Ventricular Rate      : {hr_bpm} BPM\n"
