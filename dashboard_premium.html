@@ -478,6 +478,32 @@
   </div>
 </header>
 
+<!-- Clinical Arrhythmia Patient Profile Library -->
+<div class="patient-selector-bar" id="patient-selector-bar" style="margin-bottom: 16px; background: rgba(168, 85, 247, 0.08); border: 1px solid rgba(168, 85, 247, 0.28); border-radius: 9px; padding: 9px 14px; display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap;">
+  <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+    <span style="font-size: 11px; font-weight: 700; color: #c084fc; text-transform: uppercase; letter-spacing: 0.06em; display: flex; align-items: center; gap: 6px;">
+      <span style="font-size: 14px;">⚡</span> Clinical Arrhythmia Library (12 Real Patients):
+    </span>
+    <select id="patient-dropdown" onchange="selectPatientProfile(this.value)" style="background: #0b0f19; color: #ffffff; border: 1px solid rgba(168, 85, 247, 0.45); border-radius: 6px; padding: 6px 12px; font-size: 12px; font-weight: 600; cursor: pointer; outline: none;">
+      <option value="p_frequent_pvc">Patient 101: Frequent PVCs (Ventricular Ectopy) — 84 BPM</option>
+      <option value="p_isolated_pvc">Patient 102: Isolated PVC (Sporadic Ectopy) — 74 BPM</option>
+      <option value="p_vt_couplet">Patient 103: Ventricular Couplet / Run — 77 BPM</option>
+      <option value="p_frequent_pac">Patient 104: Supraventricular Tachycardia (Frequent PACs) — 143 BPM</option>
+      <option value="p_isolated_pac">Patient 105: Isolated PAC (Atrial Ectopy) — 73 BPM</option>
+      <option value="p_marked_brady">Patient 106: Marked Sinus Bradycardia — 47 BPM</option>
+      <option value="p_mod_brady">Patient 107: Moderate Sinus Bradycardia — 52 BPM</option>
+      <option value="p_severe_tachy">Patient 108: Severe Sinus Tachycardia — 164 BPM</option>
+      <option value="p_mod_tachy">Patient 109: Sinus Tachycardia — 113 BPM</option>
+      <option value="p_irregular_afib">Patient 110: Irregular Rhythm (Possible A-Fib) — 85 BPM</option>
+      <option value="p_normal_baseline">Patient 111: Normal Sinus Rhythm (Standard) — 76 BPM</option>
+      <option value="p_normal_high_hrv">Patient 112: Resting Sinus Rhythm (High Vagal HRV) — 62 BPM</option>
+    </select>
+  </div>
+  <div id="patient-clinical-desc" style="font-size: 11.5px; color: #e9d5ff; opacity: 0.9; font-weight: 500;">
+    High ventricular ectopic burden (>15%) with frequent wide QRS complexes.
+  </div>
+</div>
+
 <section class="pipeline-ribbon">
   <div class="stage-card">
     <span class="st-title">1 • Buffer</span>
@@ -703,6 +729,37 @@ function updateModeDisplay(mode) {
   }
 }
 
+const PATIENT_DESCRIPTIONS = {
+  'p_frequent_pvc': 'High ventricular ectopic burden (>15%) with frequent wide QRS complexes.',
+  'p_isolated_pvc': 'Normal sinus background with occasional sporadic premature ventricular contractions.',
+  'p_vt_couplet': 'Back-to-back premature ventricular beats forming couplets / salvos.',
+  'p_frequent_pac': 'Rapid atrial ectopic tachycardia with narrow QRS and compensatory pauses.',
+  'p_isolated_pac': 'Premature atrial contraction occurring within standard sinus rhythm.',
+  'p_marked_brady': 'Sustained severe resting bradycardia under 50 beats per minute.',
+  'p_mod_brady': 'Slow resting sinus rhythm crossing the clinical 60 BPM bradycardia threshold.',
+  'p_severe_tachy': 'Extreme sinus tachycardia with rapid ventricular response (>160 BPM).',
+  'p_mod_tachy': 'Sustained sinus rate exceeding 100 BPM with normal morphology.',
+  'p_irregular_afib': 'Elevated nRMSSD (>0.20) showing chaotic R-R intervals characteristic of atrial fibrillation.',
+  'p_normal_baseline': 'Clean benchmark normal sinus rhythm with uniform cadence and morphology.',
+  'p_normal_high_hrv': 'Resting normal rhythm with healthy parasympathetic autonomic tone (high RMSSD).'
+};
+
+function selectPatientProfile(pid) {
+  const descEl = document.getElementById('patient-clinical-desc');
+  if (descEl && PATIENT_DESCRIPTIONS[pid]) {
+    descEl.textContent = PATIENT_DESCRIPTIONS[pid];
+  }
+  updateModeDisplay('DEMO_ECTOPY');
+  fetch('/api/patient', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({patient_id: pid})
+  }).catch(e => console.error("Error setting patient:", e));
+
+  document.getElementById('beat-log').innerHTML = '';
+  trace.fill(0);
+}
+
 function setMode(mode) {
   fetch('/api/mode', {
     method: 'POST',
@@ -826,6 +883,12 @@ ws.onmessage = (ev) => {
         originEl.innerHTML = `<span class="badge-real">● LIVE AD8232 HARDWARE</span>`;
       } else if (t.mode === 'DEMO_ARTIFACT') {
         originEl.innerHTML = `<span class="badge-sim">◆ MOTION ARTIFACT SIM</span>`;
+      } else if (t.mode === 'DEMO_ECTOPY' && t.active_patient_name) {
+        originEl.innerHTML = `<span class="badge-real">● ${t.active_patient_name}</span>`;
+        const drop = document.getElementById('patient-dropdown');
+        if (drop && t.active_patient_id && drop.value !== t.active_patient_id) {
+          drop.value = t.active_patient_id;
+        }
       } else {
         originEl.innerHTML = `<span class="badge-real">● CLINICAL DB (Icentia11k)</span>`;
       }

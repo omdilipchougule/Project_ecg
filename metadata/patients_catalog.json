@@ -1,0 +1,98 @@
+[
+  {
+    "id": "p_frequent_pvc",
+    "name": "Patient 101: Frequent PVCs (Ventricular Ectopy)",
+    "type": "Frequent PVCs",
+    "hr": 84,
+    "file": "01_frequent_pvc.npy",
+    "desc": "High ventricular ectopic burden (>15%) with frequent wide QRS complexes."
+  },
+  {
+    "id": "p_isolated_pvc",
+    "name": "Patient 102: Isolated PVC (Sporadic Ectopy)",
+    "type": "Isolated PVC",
+    "hr": 74,
+    "file": "02_isolated_pvc.npy",
+    "desc": "Normal sinus background with occasional sporadic premature ventricular contractions."
+  },
+  {
+    "id": "p_vt_couplet",
+    "name": "Patient 103: Ventricular Couplet / Run",
+    "type": "Ventricular Couplet",
+    "hr": 77,
+    "file": "03_ventricular_couplet.npy",
+    "desc": "Back-to-back premature ventricular beats forming couplets."
+  },
+  {
+    "id": "p_frequent_pac",
+    "name": "Patient 104: Supraventricular Tachycardia (Frequent PACs)",
+    "type": "Frequent PACs (SVT)",
+    "hr": 143,
+    "file": "04_frequent_pac.npy",
+    "desc": "Rapid atrial ectopic tachycardia with narrow QRS and compensatory cadence."
+  },
+  {
+    "id": "p_isolated_pac",
+    "name": "Patient 105: Isolated PAC (Atrial Ectopy)",
+    "type": "Isolated PAC",
+    "hr": 73,
+    "file": "05_isolated_pac.npy",
+    "desc": "Premature atrial contraction occurring within standard sinus rhythm."
+  },
+  {
+    "id": "p_marked_brady",
+    "name": "Patient 106: Marked Sinus Bradycardia (<50 BPM)",
+    "type": "Sinus Bradycardia",
+    "hr": 47,
+    "file": "06_marked_bradycardia.npy",
+    "desc": "Sustained severe resting bradycardia under 50 beats per minute."
+  },
+  {
+    "id": "p_mod_brady",
+    "name": "Patient 107: Moderate Sinus Bradycardia (52 BPM)",
+    "type": "Sinus Bradycardia",
+    "hr": 52,
+    "file": "07_moderate_bradycardia.npy",
+    "desc": "Slow resting sinus rhythm crossing the clinical 60 BPM bradycardia threshold."
+  },
+  {
+    "id": "p_severe_tachy",
+    "name": "Patient 108: Severe Sinus Tachycardia (164 BPM)",
+    "type": "Sinus Tachycardia",
+    "hr": 164,
+    "file": "08_severe_tachycardia.npy",
+    "desc": "Extreme sinus tachycardia with rapid ventricular response."
+  },
+  {
+    "id": "p_mod_tachy",
+    "name": "Patient 109: Sinus Tachycardia (113 BPM)",
+    "type": "Sinus Tachycardia",
+    "hr": 113,
+    "file": "09_moderate_tachycardia.npy",
+    "desc": "Sustained sinus rate exceeding 100 BPM with normal morphology."
+  },
+  {
+    "id": "p_irregular_afib",
+    "name": "Patient 110: Irregular Rhythm (Possible A-Fib)",
+    "type": "Irregular Rhythm Suspected",
+    "hr": 85,
+    "file": "10_irregular_afib.npy",
+    "desc": "Elevated nRMSSD (>0.20) showing chaotic R-R intervals characteristic of atrial fibrillation."
+  },
+  {
+    "id": "p_normal_baseline",
+    "name": "Patient 111: Normal Sinus Rhythm (Standard 76 BPM)",
+    "type": "Normal Sinus Rhythm",
+    "hr": 76,
+    "file": "11_normal_sinus.npy",
+    "desc": "Clean benchmark normal sinus rhythm with uniform cadence and morphology."
+  },
+  {
+    "id": "p_normal_high_hrv",
+    "name": "Patient 112: Resting Sinus Rhythm (High Vagal HRV)",
+    "type": "Normal Sinus Rhythm",
+    "hr": 62,
+    "file": "12_resting_sinus_high_hrv.npy",
+    "desc": "Resting normal rhythm with healthy parasympathetic autonomic tone (high RMSSD)."
+  }
+]

@@ -29,6 +29,27 @@ ALERT_COOLDOWN_SEC  = 60.0
 app = FastAPI(title="Clinical ECG Telemetry")
 bundle = ep.load_bundle(MODEL_PATH)
 
+# --- REAL PATIENT CLINICAL ARRHYTHMIA CATALOG ---
+PATIENTS_DIR = os.path.join(META_DIR, 'patients')
+CATALOG_PATH = os.path.join(META_DIR, 'patients_catalog.json')
+
+def load_patient_library():
+    catalog = []
+    arrays = {}
+    if os.path.exists(CATALOG_PATH):
+        try:
+            with open(CATALOG_PATH, 'r') as f:
+                catalog = json.load(f)
+            for item in catalog:
+                fpath = os.path.join(PATIENTS_DIR, item['file'])
+                if os.path.exists(fpath):
+                    arrays[item['id']] = np.load(fpath)
+        except Exception as e:
+            print(f"[Warning] Failed to load patient library: {e}")
+    return catalog, arrays
+
+PATIENTS_CATALOG, PATIENT_ARRAYS = load_patient_library()
+
 def build_synthetic_stream(mode='normal', seconds=120):
     """Fallback generator if .npy files are not present, or for artifact injection."""
     n = int(seconds * FS); t = np.arange(n) / FS
@@ -53,7 +74,12 @@ def load_demo_signals():
     norm_p = os.path.join(META_DIR, 'demo_normal.npy')
     ect_p  = os.path.join(META_DIR, 'demo_ectopy.npy')
     norm = np.load(norm_p) if os.path.exists(norm_p) else build_synthetic_stream('normal')
-    ect  = np.load(ect_p)  if os.path.exists(ect_p)  else build_synthetic_stream('ectopy')
+    if 'p_frequent_pvc' in PATIENT_ARRAYS:
+        ect = PATIENT_ARRAYS['p_frequent_pvc']
+    elif os.path.exists(ect_p):
+        ect = np.load(ect_p)
+    else:
+        ect = build_synthetic_stream('ectopy')
     art  = build_synthetic_stream('artifact', seconds=60)
     return {'DEMO_NORMAL': norm, 'DEMO_ECTOPY': ect, 'DEMO_ARTIFACT': art}
 
@@ -317,12 +343,19 @@ class PipelineState:
         self.packet_rate_hz = 0.0
         self._last_calc_ts = time.time()
         self._last_calc_samples = 0
+        self.active_patient_id = 'p_frequent_pvc'
         self.last_win = dict(
             primary_type='warming_up', types=[], hr_bpm=0.0,
             burden_V=0.0, burden_S=0.0, burden_Q=0.0, nrmssd=0.0,
             rmssd_ms=0.0, stress_state='Calibrating',
             n_beats=0, alert_dispatched=False
         )
+
+    def set_patient(self, pid):
+        if pid in PATIENT_ARRAYS:
+            self.active_patient_id = pid
+            DEMOS['DEMO_ECTOPY'] = PATIENT_ARRAYS[pid]
+            self.reset_detector('DEMO_ECTOPY')
 
     def reset_detector(self, new_mode):
         self.mode = new_mode
@@ -361,6 +394,21 @@ async def set_mode(req: ModeRequest):
         state.reset_detector(req.mode)
         return {"status": "ok", "mode": state.mode}
     return {"status": "error", "message": "Invalid mode"}
+
+@app.get("/api/patients")
+async def get_patients():
+    return {"status": "ok", "patients": PATIENTS_CATALOG, "active_id": state.active_patient_id}
+
+class PatientSelectRequest(BaseModel):
+    patient_id: str
+
+@app.post("/api/patient")
+async def select_patient(req: PatientSelectRequest):
+    if req.patient_id in PATIENT_ARRAYS:
+        state.set_patient(req.patient_id)
+        p_info = next((p for p in PATIENTS_CATALOG if p['id'] == req.patient_id), None)
+        return {"status": "ok", "patient_id": req.patient_id, "patient": p_info}
+    return {"status": "error", "message": "Unknown patient ID"}
 
 @app.websocket("/ws")
 async def ws_endpoint(ws: WebSocket):
@@ -500,6 +548,7 @@ async def inference_broadcaster():
         has_real_normal = os.path.exists(os.path.join(META_DIR, 'demo_normal.npy'))
         has_real_ectopy = os.path.exists(os.path.join(META_DIR, 'demo_ectopy.npy'))
 
+        active_p = next((p for p in PATIENTS_CATALOG if p['id'] == state.active_patient_id), None)
         if is_live_mode:
             is_fallback = (time_since_esp > 2.0)
             if is_fallback:
@@ -513,9 +562,9 @@ async def inference_broadcaster():
             stream_status = "DATABASE_REAL" if has_real_normal else "SYNTHETIC_FALLBACK"
             source_detail = "Icentia11k Clinical DB (Real Normal Sinus)" if has_real_normal else "Synthetic Fallback Wave"
         elif state.mode == 'DEMO_ECTOPY':
-            is_fallback = not has_real_ectopy
-            stream_status = "DATABASE_REAL" if has_real_ectopy else "SYNTHETIC_FALLBACK"
-            source_detail = "Icentia11k Clinical DB (Real Ectopic Arrhythmia)" if has_real_ectopy else "Synthetic Fallback Wave"
+            is_fallback = len(PATIENT_ARRAYS) == 0 and not has_real_ectopy
+            stream_status = "DATABASE_REAL" if not is_fallback else "SYNTHETIC_FALLBACK"
+            source_detail = f"Clinical DB: {active_p['name']}" if active_p else "Icentia11k Clinical DB (Real Arrhythmia)"
         else:
             is_fallback = False
             stream_status = "ARTIFACT_SIMULATION"
@@ -534,6 +583,8 @@ async def inference_broadcaster():
             "mode": state.mode,
             "status": stream_status,
             "detail": source_detail,
+            "active_patient_id": state.active_patient_id,
+            "active_patient_name": active_p['name'] if active_p else "Patient 101",
             "is_fallback": is_fallback,
             "rate_hz": state.packet_rate_hz,
             "last_packet_s": round(time_since_esp, 1) if (is_live_mode and state.last_esp32_packet_time > 0) else 0.0,
