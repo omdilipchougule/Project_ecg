@@ -1,5 +1,6 @@
 """server.py - Raspberry Pi 5 FastAPI + WebSocket + UDP Telemetry Server for ECG Arrhythmia Pipeline."""
 import os, sys, io, uuid, time, json, socket, asyncio, threading, smtplib
+from typing import Optional, List, Dict
 import urllib.request
 from email.message import EmailMessage
 from collections import deque
@@ -10,6 +11,7 @@ from pydantic import BaseModel
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 import ecg_pipeline as ep
+import patient_db as pdb
 from ecg_features import FS
 from arrhythmia_rules import CFG
 
@@ -27,6 +29,7 @@ PHYSICIAN_EMAIL     = os.getenv("ECG_PHYSICIAN_EMAIL", "om2018chougule@gmail.com
 ALERT_COOLDOWN_SEC  = 60.0
 
 app = FastAPI(title="Clinical ECG Telemetry")
+pdb.init_db()
 bundle = ep.load_bundle(MODEL_PATH)
 
 # --- REAL PATIENT CLINICAL ARRHYTHMIA CATALOG ---
@@ -226,6 +229,7 @@ def _post_discord_multipart(webhook_url, payload_dict, png_bytes=None):
     urllib.request.urlopen(req, timeout=10)
 
 def _send_alerts_worker(ep_snapshot):
+    patient_id   = ep_snapshot.get("patient_id", "PT-LIVE")
     diagnosis    = ep_snapshot["primary"]
     all_rules    = ep_snapshot["types"]
     hr_bpm       = ep_snapshot["hr_bpm"]
@@ -325,6 +329,23 @@ def _send_alerts_worker(ep_snapshot):
         except Exception as e:
             print(f"[Triage Warning] SMTP Email failed: {e}")
 
+    # Record dispatched alert in persistent SQLite history
+    try:
+        channels = []
+        if DISCORD_WEBHOOK_URL and "YOUR_DISCORD" not in DISCORD_WEBHOOK_URL:
+            channels.append("Discord Webhook")
+        if SMTP_APP_PASSWORD and "YOUR_16_CHAR" not in SMTP_APP_PASSWORD:
+            channels.append(f"SMTP ({PHYSICIAN_EMAIL})")
+        pdb.log_alert(
+            patient_id=patient_id,
+            diagnosis=clean_diag,
+            channels=", ".join(channels) if channels else "Console Log",
+            recipient=PHYSICIAN_EMAIL,
+            status="DISPATCHED"
+        )
+    except Exception as e:
+        print(f"[Record Warning] Failed to log alert in DB: {e}")
+
 
 class PipelineState:
     def __init__(self):
@@ -344,6 +365,7 @@ class PipelineState:
         self._last_calc_ts = time.time()
         self._last_calc_samples = 0
         self.active_patient_id = 'p_frequent_pvc'
+        self.active_patient_record_id = 'PT-LIVE'
         self.last_win = dict(
             primary_type='warming_up', types=[], hr_bpm=0.0,
             burden_V=0.0, burden_S=0.0, burden_Q=0.0, nrmssd=0.0,
@@ -409,6 +431,58 @@ async def select_patient(req: PatientSelectRequest):
         p_info = next((p for p in PATIENTS_CATALOG if p['id'] == req.patient_id), None)
         return {"status": "ok", "patient_id": req.patient_id, "patient": p_info}
     return {"status": "error", "message": "Unknown patient ID"}
+
+# --- PERSISTENT PATIENT RECORDS & HISTORY API ---
+class AddPatientRecordRequest(BaseModel):
+    patient_id: str
+    name: str
+    age: Optional[int] = None
+    gender: Optional[str] = "Other"
+    medical_notes: Optional[str] = ""
+
+class SetActivePatientRecordRequest(BaseModel):
+    patient_id: str
+
+@app.get("/api/records/patients")
+async def get_patient_records():
+    pts = pdb.get_patients()
+    return {"status": "ok", "patients": pts, "active_id": state.active_patient_record_id}
+
+@app.post("/api/records/patients")
+async def add_patient_record(req: AddPatientRecordRequest):
+    p = pdb.add_patient(
+        req.patient_id.strip(),
+        req.name.strip(),
+        req.age,
+        req.gender,
+        req.medical_notes.strip() if req.medical_notes else ""
+    )
+    return {"status": "ok", "patient": p}
+
+@app.get("/api/records/active")
+async def get_active_patient_record():
+    p = pdb.get_patient(state.active_patient_record_id)
+    return {"status": "ok", "patient": p, "active_id": state.active_patient_record_id}
+
+@app.post("/api/records/active")
+async def set_active_patient_record(req: SetActivePatientRecordRequest):
+    p = pdb.get_patient(req.patient_id)
+    if p:
+        state.active_patient_record_id = req.patient_id
+        return {"status": "ok", "active_id": state.active_patient_record_id, "patient": p}
+    return {"status": "error", "message": "Patient not found"}
+
+@app.get("/api/records/episodes")
+async def get_patient_episodes(patient_id: Optional[str] = None, limit: int = 50):
+    pid = patient_id if patient_id else state.active_patient_record_id
+    episodes = pdb.get_episodes(pid, limit=limit)
+    return {"status": "ok", "patient_id": pid, "episodes": episodes}
+
+@app.get("/api/records/alerts")
+async def get_patient_alerts(patient_id: Optional[str] = None, limit: int = 50):
+    pid = patient_id if patient_id else state.active_patient_record_id
+    alerts = pdb.get_alerts(pid, limit=limit)
+    return {"status": "ok", "patient_id": pid, "alerts": alerts}
 
 @app.websocket("/ws")
 async def ws_endpoint(ws: WebSocket):
@@ -506,10 +580,33 @@ async def inference_broadcaster():
                 if (now - state.last_alert_ts) >= ALERT_COOLDOWN_SEC:
                     state.last_alert_ts = now
                     state.alert_latch = True
+                    
+                    pid = state.active_patient_record_id
+                    clean_diag_str = DIAGNOSIS_LABELS.get(primary, primary.replace("_", " ").title())
+
+                    # Persist irregular arrhythmia episode to SQLite database
+                    try:
+                        pdb.log_episode(
+                            patient_id=pid,
+                            primary_diagnosis=clean_diag_str,
+                            triggered_rules=list(w['types']),
+                            hr_bpm=hr_bpm,
+                            burden_v=burden_v,
+                            burden_s=burden_s,
+                            burden_q=burden_q,
+                            rmssd_ms=rmssd_ms,
+                            stress_state=stress_state,
+                            telemetry_source=state.mode,
+                            duration_s=30.0
+                        )
+                    except Exception as e:
+                        print(f"[Record Warning] Failed to log episode: {e}")
+
                     # Slice the last 6 seconds (1500 samples) from the detector buffer for the episode strip
                     buf_arr = np.array(state.det.buf, dtype=np.float32)
                     sig_slice = buf_arr[-int(6 * FS):].copy() if len(buf_arr) > 0 else np.array([])
                     snapshot = dict(
+                        patient_id=pid,
                         primary=primary,
                         types=list(w['types']),
                         hr_bpm=hr_bpm,

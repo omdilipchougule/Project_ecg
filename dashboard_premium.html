@@ -454,6 +454,273 @@
     .fb-alert-text { display: flex; flex-direction: column; font-size: 12px; }
     .fb-alert-text strong { font-size: 13px; color: #fee2e2; letter-spacing: 0.02em; }
 
+    /* --- PATIENT CLINICAL HISTORY & RECORDS SECTION --- */
+    .patient-history-section {
+      background: var(--bg-surface);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--border-subtle);
+      border-radius: 12px;
+      padding: 18px 22px;
+      margin-top: 20px;
+    }
+    .ph-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+      padding-bottom: 14px;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+    .ph-title-group {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .ph-title-group h3 {
+      font-size: 15px;
+      font-weight: 700;
+      color: #ffffff;
+      letter-spacing: -0.01em;
+    }
+    .ph-active-badge {
+      background: rgba(6, 182, 212, 0.15);
+      color: #22d3ee;
+      border: 1px solid rgba(6, 182, 212, 0.4);
+      padding: 3px 9px;
+      border-radius: 5px;
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .ph-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .ph-btn-subtle {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-secondary);
+      padding: 6px 12px;
+      border-radius: 7px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .ph-btn-subtle:hover {
+      background: rgba(255, 255, 255, 0.1);
+      color: #ffffff;
+    }
+    .ph-btn-primary {
+      background: linear-gradient(135deg, #0284c7, #06b6d4);
+      border: none;
+      color: #ffffff;
+      padding: 6px 14px;
+      border-radius: 7px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      box-shadow: 0 2px 10px rgba(6, 182, 212, 0.35);
+      transition: all 0.2s ease;
+    }
+    .ph-btn-primary:hover {
+      filter: brightness(1.1);
+    }
+    .ph-tabs {
+      display: flex;
+      gap: 8px;
+      margin-top: 14px;
+      margin-bottom: 14px;
+      border-bottom: 1px solid var(--border-subtle);
+      padding-bottom: 8px;
+    }
+    .ph-tab {
+      background: transparent;
+      border: none;
+      color: var(--text-secondary);
+      font-size: 12.5px;
+      font-weight: 600;
+      padding: 6px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .ph-tab:hover {
+      color: #ffffff;
+    }
+    .ph-tab.active {
+      color: #38bdf8;
+      background: rgba(56, 189, 248, 0.12);
+    }
+    .ph-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+    .ph-table th {
+      text-align: left;
+      padding: 8px 10px;
+      color: var(--text-muted);
+      font-size: 10.5px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+    .ph-table td {
+      padding: 9px 10px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+      color: #ffffff;
+    }
+    .ph-table tr:hover {
+      background: rgba(255, 255, 255, 0.025);
+    }
+    .directory-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+      gap: 12px;
+      margin-top: 10px;
+    }
+    .patient-card {
+      background: rgba(15, 20, 30, 0.9);
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      padding: 12px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      transition: border-color 0.2s ease;
+    }
+    .patient-card:hover {
+      border-color: rgba(6, 182, 212, 0.4);
+    }
+    .patient-card.active-pt {
+      border-color: #06b6d4;
+      background: rgba(6, 182, 212, 0.08);
+    }
+    .pt-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .pt-card-id {
+      font-size: 11px;
+      font-weight: 700;
+      color: #38bdf8;
+    }
+    .pt-card-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: #ffffff;
+    }
+    .pt-card-meta {
+      font-size: 11px;
+      color: var(--text-secondary);
+    }
+    .pt-card-notes {
+      font-size: 11px;
+      color: var(--text-muted);
+      font-style: italic;
+    }
+    .pt-card-btn {
+      margin-top: 6px;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid var(--border-subtle);
+      color: #ffffff;
+      padding: 4px 8px;
+      border-radius: 5px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      width: 100%;
+    }
+    .pt-card-btn:hover {
+      background: rgba(6, 182, 212, 0.25);
+      border-color: #06b6d4;
+    }
+
+    /* Modal Styling */
+    .modal-overlay {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(4px);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
+    }
+    .modal-box {
+      background: #0d121d;
+      border: 1px solid var(--border-highlight);
+      border-radius: 12px;
+      padding: 20px 24px;
+      width: 90%;
+      max-width: 480px;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+    }
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+    .modal-header h4 {
+      font-size: 16px;
+      font-weight: 700;
+      color: #ffffff;
+    }
+    .modal-close {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      font-size: 16px;
+      cursor: pointer;
+    }
+    .modal-close:hover { color: #ffffff; }
+    .form-group {
+      margin-bottom: 14px;
+    }
+    .form-group label {
+      display: block;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      margin-bottom: 5px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .form-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    .form-input {
+      width: 100%;
+      background: #060910;
+      border: 1px solid var(--border-subtle);
+      border-radius: 7px;
+      padding: 8px 12px;
+      color: #ffffff;
+      font-size: 13px;
+      outline: none;
+      font-family: inherit;
+    }
+    .form-input:focus {
+      border-color: #06b6d4;
+    }
+    .modal-footer {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      margin-top: 18px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border-subtle);
+    }
+
     @media (max-width: 1150px) {
       .workspace { grid-template-columns: 1fr; }
       .vitals-grid { grid-template-columns: repeat(3, 1fr); }
@@ -628,6 +895,115 @@
     </table>
   </div>
 </main>
+
+<!-- Patient Health Records & Irregular Episode Logs Section -->
+<section class="patient-history-section">
+  <div class="ph-header">
+    <div class="ph-title-group">
+      <h3>Patient Health Records & Clinical Episode Log</h3>
+      <span class="ph-active-badge mono" id="ph-active-banner">MONITORING: PT-LIVE (Live Subject)</span>
+    </div>
+    <div class="ph-actions">
+      <button class="ph-btn-subtle" onclick="openAddPatientModal()">+ Register Patient</button>
+      <button class="ph-btn-primary" onclick="refreshPatientRecords()">⟳ Refresh History</button>
+    </div>
+  </div>
+
+  <!-- Segmented Tabs for Patient History -->
+  <div class="ph-tabs">
+    <button class="ph-tab active" id="tab-btn-episodes" onclick="switchPhTab('episodes')">Arrhythmia Episode History (<span id="count-episodes">0</span>)</button>
+    <button class="ph-tab" id="tab-btn-alerts" onclick="switchPhTab('alerts')">Telemedicine Alerts Sent (<span id="count-alerts">0</span>)</button>
+    <button class="ph-tab" id="tab-btn-directory" onclick="switchPhTab('directory')">Patient Directory (<span id="count-patients">4</span>)</button>
+  </div>
+
+  <!-- Tab Content 1: Episode History -->
+  <div id="ph-content-episodes" class="ph-tab-content">
+    <table class="ph-table mono">
+      <thead>
+        <tr>
+          <th>Timestamp</th>
+          <th>Primary Diagnosis</th>
+          <th>Triggered Rules</th>
+          <th>Ventricular Rate</th>
+          <th>PVC Burden</th>
+          <th>PAC Burden</th>
+          <th>HRV (RMSSD)</th>
+          <th>Source</th>
+        </tr>
+      </thead>
+      <tbody id="episodes-table-body">
+        <tr><td colspan="8" style="text-align:center; color:var(--text-muted); padding:16px;">No irregular episodes logged yet for this patient.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Tab Content 2: Alerts History -->
+  <div id="ph-content-alerts" class="ph-tab-content" style="display:none;">
+    <table class="ph-table mono">
+      <thead>
+        <tr>
+          <th>Timestamp</th>
+          <th>Alert Condition</th>
+          <th>Channels Dispatched</th>
+          <th>Physician Recipient</th>
+          <th>Dispatch Status</th>
+        </tr>
+      </thead>
+      <tbody id="alerts-table-body">
+        <tr><td colspan="5" style="text-align:center; color:var(--text-muted); padding:16px;">No telemedicine alerts sent yet.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Tab Content 3: Patient Directory -->
+  <div id="ph-content-directory" class="ph-tab-content" style="display:none;">
+    <div id="patients-directory-grid" class="directory-grid">
+      <!-- Populated dynamically via JS -->
+    </div>
+  </div>
+</section>
+
+<!-- Modal: Register New Patient Profile -->
+<div id="add-patient-modal" class="modal-overlay" style="display:none;">
+  <div class="modal-box">
+    <div class="modal-header">
+      <h4>Register New Patient Profile</h4>
+      <button class="modal-close" onclick="closeAddPatientModal()">✕</button>
+    </div>
+    <form id="add-patient-form" onsubmit="submitNewPatient(event)">
+      <div class="form-group">
+        <label>Patient ID / MRN *</label>
+        <input type="text" id="inp-pid" required placeholder="e.g. PT-204" class="form-input">
+      </div>
+      <div class="form-group">
+        <label>Full Patient Name *</label>
+        <input type="text" id="inp-name" required placeholder="e.g. Alex Morgan" class="form-input">
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Age</label>
+          <input type="number" id="inp-age" placeholder="58" class="form-input">
+        </div>
+        <div class="form-group">
+          <label>Gender</label>
+          <select id="inp-gender" class="form-input">
+            <option value="Male">Male</option>
+            <option value="Female">Female</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Clinical Notes / Medical History</label>
+        <textarea id="inp-notes" rows="2" placeholder="History of hypertension, nocturnal bradycardia, ectopy..." class="form-input"></textarea>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="ph-btn-subtle" onclick="closeAddPatientModal()">Cancel</button>
+        <button type="submit" class="ph-btn-primary">Save Patient</button>
+      </div>
+    </form>
+  </div>
+</div>
 
 <script>
 const canvas = document.getElementById('ecgCanvas');
@@ -976,6 +1352,180 @@ ws.onmessage = (ev) => {
     });
   }
 };
+
+// --- PATIENT HEALTH RECORD & HISTORY MANAGEMENT ---
+let currentActivePatientId = 'PT-LIVE';
+let currentPhTab = 'episodes';
+
+function switchPhTab(tab) {
+  currentPhTab = tab;
+  ['episodes', 'alerts', 'directory'].forEach(t => {
+    const btn = document.getElementById(`tab-btn-${t}`);
+    const content = document.getElementById(`ph-content-${t}`);
+    if (btn) btn.classList.toggle('active', t === tab);
+    if (content) content.style.display = (t === tab) ? 'block' : 'none';
+  });
+  if (tab === 'episodes') loadPatientEpisodes();
+  else if (tab === 'alerts') loadPatientAlerts();
+  else if (tab === 'directory') loadPatientDirectory();
+}
+
+function openAddPatientModal() {
+  document.getElementById('add-patient-modal').style.display = 'flex';
+}
+
+function closeAddPatientModal() {
+  document.getElementById('add-patient-modal').style.display = 'none';
+}
+
+async function submitNewPatient(e) {
+  e.preventDefault();
+  const pid = document.getElementById('inp-pid').value.trim();
+  const name = document.getElementById('inp-name').value.trim();
+  const age = document.getElementById('inp-age').value ? parseInt(document.getElementById('inp-age').value) : null;
+  const gender = document.getElementById('inp-gender').value;
+  const notes = document.getElementById('inp-notes').value.trim();
+
+  try {
+    const res = await fetch('/api/records/patients', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({patient_id: pid, name: name, age: age, gender: gender, medical_notes: notes})
+    });
+    const d = await res.json();
+    if (d.status === 'ok') {
+      closeAddPatientModal();
+      document.getElementById('add-patient-form').reset();
+      setActivePatient(pid);
+      refreshPatientRecords();
+    }
+  } catch (err) {
+    console.error("Error adding patient:", err);
+  }
+}
+
+async function setActivePatient(pid) {
+  try {
+    const res = await fetch('/api/records/active', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({patient_id: pid})
+    });
+    const d = await res.json();
+    if (d.status === 'ok') {
+      currentActivePatientId = pid;
+      refreshPatientRecords();
+    }
+  } catch (err) {
+    console.error("Error setting active patient:", err);
+  }
+}
+
+async function loadPatientDirectory() {
+  try {
+    const res = await fetch('/api/records/patients');
+    const d = await res.json();
+    if (d.status === 'ok') {
+      currentActivePatientId = d.active_id;
+      document.getElementById('count-patients').textContent = d.patients.length;
+      
+      const grid = document.getElementById('patients-directory-grid');
+      grid.innerHTML = d.patients.map(p => {
+        const isActive = (p.patient_id === currentActivePatientId);
+        return `
+          <div class="patient-card ${isActive ? 'active-pt' : ''}">
+            <div class="pt-card-header">
+              <span class="pt-card-id">${p.patient_id}</span>
+              ${isActive ? '<span style="font-size:10px; color:#22d3ee; font-weight:700;">● MONITORING</span>' : ''}
+            </div>
+            <div class="pt-card-name">${p.name}</div>
+            <div class="pt-card-meta">${p.age ? p.age + 'y • ' : ''}${p.gender || 'Patient'} | Episodes: <strong>${p.episode_count || 0}</strong></div>
+            <div class="pt-card-notes">${p.medical_notes ? p.medical_notes : 'No clinical notes recorded.'}</div>
+            ${!isActive ? `<button class="pt-card-btn" onclick="setActivePatient('${p.patient_id}')">Select for Monitoring</button>` : ''}
+          </div>
+        `;
+      }).join('');
+    }
+  } catch (err) {
+    console.error("Error loading directory:", err);
+  }
+}
+
+async function loadPatientEpisodes() {
+  try {
+    const res = await fetch(`/api/records/episodes?patient_id=${encodeURIComponent(currentActivePatientId)}`);
+    const d = await res.json();
+    if (d.status === 'ok') {
+      document.getElementById('count-episodes').textContent = d.episodes.length;
+      const tbody = document.getElementById('episodes-table-body');
+      if (d.episodes.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; color:var(--text-muted); padding:16px;">No irregular episodes logged yet for this patient.</td></tr>`;
+      } else {
+        tbody.innerHTML = d.episodes.map(ep => `
+          <tr>
+            <td style="color:var(--text-secondary);">${ep.timestamp}</td>
+            <td style="color:#fb7185; font-weight:700;">${ep.primary_diagnosis}</td>
+            <td style="color:#c084fc;">${ep.triggered_rules || 'none'}</td>
+            <td style="color:#ffffff; font-weight:700;">${ep.hr_bpm ? ep.hr_bpm.toFixed(1) + ' BPM' : '--'}</td>
+            <td style="color:${ep.burden_v > 0 ? '#fb7185' : '#ffffff'};">${ep.burden_v}%</td>
+            <td style="color:${ep.burden_s > 0 ? '#c084fc' : '#ffffff'};">${ep.burden_s}%</td>
+            <td style="color:#38bdf8;">${ep.rmssd_ms ? ep.rmssd_ms.toFixed(1) + ' ms' : '--'}</td>
+            <td><span style="font-size:10px; background:rgba(255,255,255,0.06); padding:2px 6px; border-radius:4px;">${ep.telemetry_source}</span></td>
+          </tr>
+        `).join('');
+      }
+    }
+  } catch (err) {
+    console.error("Error loading episodes:", err);
+  }
+}
+
+async function loadPatientAlerts() {
+  try {
+    const res = await fetch(`/api/records/alerts?patient_id=${encodeURIComponent(currentActivePatientId)}`);
+    const d = await res.json();
+    if (d.status === 'ok') {
+      document.getElementById('count-alerts').textContent = d.alerts.length;
+      const tbody = document.getElementById('alerts-table-body');
+      if (d.alerts.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; color:var(--text-muted); padding:16px;">No telemedicine alerts sent yet.</td></tr>`;
+      } else {
+        tbody.innerHTML = d.alerts.map(al => `
+          <tr>
+            <td style="color:var(--text-secondary);">${al.timestamp}</td>
+            <td style="color:#f87171; font-weight:700;">🚨 ${al.diagnosis}</td>
+            <td style="color:#38bdf8;">${al.channels}</td>
+            <td style="color:#ffffff;">${al.recipient || 'Physician'}</td>
+            <td><span style="background:rgba(16,185,129,0.15); color:#34d399; border:1px solid rgba(16,185,129,0.3); padding:2px 6px; border-radius:4px; font-weight:700; font-size:10px;">${al.status}</span></td>
+          </tr>
+        `).join('');
+      }
+    }
+  } catch (err) {
+    console.error("Error loading alerts:", err);
+  }
+}
+
+async function refreshPatientRecords() {
+  try {
+    const res = await fetch('/api/records/active');
+    const d = await res.json();
+    if (d.status === 'ok' && d.patient) {
+      currentActivePatientId = d.active_id;
+      const banner = document.getElementById('ph-active-banner');
+      if (banner) {
+        banner.textContent = `MONITORING: ${d.patient.patient_id} (${d.patient.name})`;
+      }
+    }
+  } catch (e) {}
+
+  if (currentPhTab === 'episodes') loadPatientEpisodes();
+  else if (currentPhTab === 'alerts') loadPatientAlerts();
+  else if (currentPhTab === 'directory') loadPatientDirectory();
+}
+
+// Initial load of patient records on dashboard startup
+setTimeout(refreshPatientRecords, 1000);
 </script>
 </body>
 </html>
